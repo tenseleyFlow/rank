@@ -18,6 +18,7 @@ Read these before implementation work:
 ## Working Rules
 
 - Follow the sprint files in order. Do not skip ahead without updating docs and tests.
+- The default branch is `trunk`.
 - Keep changes small and reviewable.
 - Commit often when asked to commit. Use short imperative commit messages.
 - Never add co-author trailers or generated-by trailers.
@@ -26,6 +27,7 @@ Read these before implementation work:
 - Do not add compatibility layers unless there is a concrete need.
 - Do not add dependencies beyond libc unless explicitly approved.
 - Use C11, a single Makefile, and a hand-written configure probe. No autotools. No CMake.
+- Keep the intended architecture compiling end-to-end, even when modules are still stubs.
 - Build with the full warning set as errors.
 - Keep ASan/UBSan clean. Use TSan for threaded code when available.
 

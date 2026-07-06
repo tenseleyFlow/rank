@@ -1,1 +1,8 @@
 .docs/refs/
+*.d
+*.o
+/build/
+/config.h
+/config.mk
+/rank
+/bench/results/

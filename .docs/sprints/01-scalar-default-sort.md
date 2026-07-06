@@ -26,6 +26,13 @@ Ship the scalar parity core for default sorting. This is the internal oracle for
 - `-u` must follow GNU's active comparison semantics. Golden tests decide survivor behavior.
 - Prefer a stable merge sort if it simplifies `-s` and later keyed grouping.
 
+## Subsprints
+
+- 01A - Scalar core: parse base options, read stdin/files into arenas, split counted records, stable merge sort by whole-line bytes, write stdout.
+- 01B - Output safety and diagnostics: implement `-o`, missing-file diagnostics, read/write error paths, and input/output alias preservation.
+- 01C - Base semantics: finish `-r`, `-s`, `-u`, `-z`, multiple files, repeated stdin operands, missing final terminators, and comparator counters.
+- 01D - Coverage pass: expand golden fixtures, sanitizer coverage, and debug counter checks before entering Sprint 02.
+
 ## Parity tests
 
 - Empty input, one line, two lines, already sorted, reverse sorted, all equal lines.

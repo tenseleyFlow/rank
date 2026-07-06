@@ -7,6 +7,7 @@ Create the project skeleton and the two control systems that keep rank on track:
 ## Build targets
 
 - Add a C11 source tree matching the overview architecture.
+- Add compiling stubs for the architecture modules so future sprints fill in the intended shape instead of adding ad hoc files.
 - Add a single GNU Make build. Use `gmake` on FreeBSD.
 - Add a hand-written configure probe that writes `config.h` and `config.mk`.
 - Build a `rank` binary with stub option handling and clear unsupported diagnostics.
@@ -20,6 +21,7 @@ Create the project skeleton and the two control systems that keep rank on track:
 ## Implementation notes
 
 - Keep dependencies to libc and standard developer tools.
+- Keep the whole skeleton linked through `src/main.c`; dead modules should still compile cleanly under `-Werror`.
 - Treat GNU sort as the external truth and the future scalar comparator as the internal truth.
 - Normalize only the program-name token in diagnostics when comparing stderr.
 - Make test fixtures reproducible. Seed generators and store corpus hashes in perf results.
