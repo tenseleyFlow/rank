@@ -24,13 +24,13 @@ rank_sort_lines(struct rank_lines *lines, const struct rank_options *options)
     }
 
     aux = rank_xmalloc(lines->len * sizeof(aux[0]));
-    rank_cmp_context_init(&cmp, options);
+    rank_cmp_context_init(&cmp, options, lines);
     merge_sort_range(lines->items, aux, 0, lines->len, &cmp);
     if (getenv("RANK_DEBUG_STATS") != NULL) {
         fprintf(stderr, "rank: comparator calls=%zu bytes=%zu\n", cmp.calls, cmp.bytes);
     }
     if (getenv("RANK_DEBUG_VERIFY") != NULL) {
-        rank_cmp_context_init(&cmp, options);
+        rank_cmp_context_init(&cmp, options, lines);
         for (i = 1; i < lines->len; i++) {
             if (rank_compare_lines(&cmp, &lines->items[i - 1U], &lines->items[i]) > 0) {
                 fprintf(stderr, "rank: internal sort verification failed at record %zu\n", i);

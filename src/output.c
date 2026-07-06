@@ -29,11 +29,11 @@ rank_output_lines(const struct rank_lines *lines, const struct rank_options *opt
         }
     }
 
-    rank_cmp_context_init(&cmp, options);
+    rank_cmp_context_init(&cmp, options, lines);
     for (i = 0; i < lines->len; i++) {
         const struct rank_line *line = &lines->items[i];
 
-        if (options->unique && previous != NULL && rank_compare_lines_ascending(&cmp, previous, line) == 0) {
+        if (options->unique && previous != NULL && rank_compare_unique(&cmp, previous, line) == 0) {
             continue;
         }
         if (!write_all(stream, line->text, line->len) || fputc(delim, stream) == EOF) {

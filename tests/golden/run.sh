@@ -46,6 +46,25 @@ run_case single 'only\n'
 run_case equal 'x\nx\nx\n'
 run_case already-sorted 'a\nb\nc\n'
 run_case reverse-sorted 'c\nb\na\n'
+run_case key-second 'z 2\na 1\n' -k2,2
+run_case key-char 'xa\nyb\n' -k1.2,1.2
+run_case key-open 'p z\np a\n' -k2
+run_case key-stable 'b 1\na 1\n' -s -k2,2
+run_case key-unique 'b 1\na 1\nc 2\n' -u -k2,2
+run_case key-multi 'b 2\na 2\nc 1\n' -k2,2 -k1,1
+run_case key-reverse 'a 1\nb 2\n' -k2,2r
+run_case key-global-reverse 'a 1\nb 2\n' -r -k2,2
+run_case key-blanks 'x   b\ny   a\n' -b -k2,2
+
+printf 'z,2\na,1\n' | ./rank -t, -k2,2 > /tmp/rank-golden-sep.got
+printf 'a,1\nz,2\n' > /tmp/rank-golden-sep.want
+cmp /tmp/rank-golden-sep.got /tmp/rank-golden-sep.want
+rm -f /tmp/rank-golden-sep.got /tmp/rank-golden-sep.want
+
+printf 'b,,2\na,,1\n' | ./rank -t, -k3,3 > /tmp/rank-golden-adjsep.got
+printf 'a,,1\nb,,2\n' > /tmp/rank-golden-adjsep.want
+cmp /tmp/rank-golden-adjsep.got /tmp/rank-golden-adjsep.want
+rm -f /tmp/rank-golden-adjsep.got /tmp/rank-golden-adjsep.want
 
 long_a=$(printf 'a%0999d\n' 0)
 long_b=$(printf 'b%0999d\n' 0)

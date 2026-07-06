@@ -39,6 +39,12 @@ main(int argc, char **argv)
     rank_lines_init(&lines);
     if (!rank_lines_read_all(&lines, &options)) {
         rank_lines_free(&lines);
+        free(options.keys);
+        return RANK_EXIT_SERIOUS;
+    }
+    if (!rank_lines_prepare_keys(&lines, &options)) {
+        rank_lines_free(&lines);
+        free(options.keys);
         return RANK_EXIT_SERIOUS;
     }
     if (!rank_sort_lines(&lines, &options)) {
