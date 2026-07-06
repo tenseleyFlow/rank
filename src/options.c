@@ -361,10 +361,6 @@ add_key(struct rank_options *options, const char *text)
         options->keys = rank_xrealloc(options->keys, cap * sizeof(options->keys[0]));
         options->key_cap = cap;
     }
-    if (options->ignore_leading_blanks) {
-        key.ignore_start_blanks = true;
-        key.ignore_end_blanks = true;
-    }
     options->keys[options->key_count++] = key;
     return RANK_OPTIONS_OK;
 }

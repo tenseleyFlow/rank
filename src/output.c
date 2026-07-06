@@ -89,6 +89,7 @@ write_debug_annotations(FILE *stream, const struct rank_lines *lines, const stru
             }
         }
         if (span->len == 0) {
+            fprintf(stderr, "%s: debug: key %zu is empty for record %zu\n", options->program_name, k + 1U, line->ordinal + 1U);
             if (fputc('^', stream) == EOF) {
                 return false;
             }

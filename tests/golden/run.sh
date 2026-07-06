@@ -49,12 +49,15 @@ run_case reverse-sorted 'c\nb\na\n'
 run_case key-second 'z 2\na 1\n' -k2,2
 run_case key-char 'xa\nyb\n' -k1.2,1.2
 run_case key-open 'p z\np a\n' -k2
+run_case key-end-zero 'ab\naa\n' -k1.1,1.0
+run_case key-missing-field 'b\na x\n' -k2,2
 run_case key-stable 'b 1\na 1\n' -s -k2,2
 run_case key-unique 'b 1\na 1\nc 2\n' -u -k2,2
 run_case key-multi 'b 2\na 2\nc 1\n' -k2,2 -k1,1
 run_case key-reverse 'a 1\nb 2\n' -k2,2r
 run_case key-global-reverse 'a 1\nb 2\n' -r -k2,2
 run_case key-blanks 'x   b\ny   a\n' -b -k2,2
+run_case key-blanks-late 'x   b\ny   a\n' -k2,2 -b
 run_case obsolete-key 'b 1\na 2\n' +1
 run_case obsolete-key-range 'z 2\na 1\n' +0 -1
 
@@ -63,6 +66,12 @@ printf 'a 1\n  _\nz 2\n  _\n' > /tmp/rank-golden-debug.want
 cmp /tmp/rank-golden-debug.got /tmp/rank-golden-debug.want
 grep 'rank: debug: key annotations enabled' /tmp/rank-golden-debug.err >/dev/null
 rm -f /tmp/rank-golden-debug.got /tmp/rank-golden-debug.want /tmp/rank-golden-debug.err
+
+printf 'b\na\n' | ./rank --debug -k2,2 > /tmp/rank-golden-debug-empty.got 2>/tmp/rank-golden-debug-empty.err
+printf 'a\n ^\nb\n ^\n' > /tmp/rank-golden-debug-empty.want
+cmp /tmp/rank-golden-debug-empty.got /tmp/rank-golden-debug-empty.want
+grep 'rank: debug: key 1 is empty for record 1' /tmp/rank-golden-debug-empty.err >/dev/null
+rm -f /tmp/rank-golden-debug-empty.got /tmp/rank-golden-debug-empty.want /tmp/rank-golden-debug-empty.err
 
 printf 'z,2\na,1\n' | ./rank -t, -k2,2 > /tmp/rank-golden-sep.got
 printf 'a,1\nz,2\n' > /tmp/rank-golden-sep.want

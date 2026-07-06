@@ -224,6 +224,8 @@ extract_key_span(const struct rank_line *line, const struct rank_options *option
 {
     size_t start;
     size_t limit;
+    bool ignore_start_blanks = options->ignore_leading_blanks || key->ignore_start_blanks;
+    bool ignore_end_blanks = options->ignore_leading_blanks || key->ignore_end_blanks;
     struct rank_key_span span;
 
     if (options->has_field_separator) {
@@ -233,8 +235,8 @@ extract_key_span(const struct rank_line *line, const struct rank_options *option
             limit = explicit_field_end(line, options->field_separator, limit);
         }
     } else {
-        start = blank_field_start(line, key->start_field, key->ignore_start_blanks);
-        limit = key->has_end ? blank_field_start(line, key->end_field, key->ignore_end_blanks) : line->len;
+        start = blank_field_start(line, key->start_field, ignore_start_blanks);
+        limit = key->has_end ? blank_field_start(line, key->end_field, ignore_end_blanks) : line->len;
         if (key->has_end) {
             limit = blank_field_end(line, limit);
         }
@@ -252,7 +254,7 @@ extract_key_span(const struct rank_line *line, const struct rank_options *option
         if (options->has_field_separator) {
             field_start = explicit_field_start(line, options->field_separator, key->end_field);
         } else {
-            field_start = blank_field_start(line, key->end_field, key->ignore_end_blanks);
+            field_start = blank_field_start(line, key->end_field, ignore_end_blanks);
         }
         limit = add > line->len - field_start ? line->len : field_start + add;
     }
