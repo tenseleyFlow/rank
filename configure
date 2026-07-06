@@ -1,0 +1,58 @@
+#!/bin/sh
+set -eu
+
+cc=${CC:-cc}
+mkdir -p build
+
+try_compile() {
+    name=$1
+    code=$2
+    src="build/probe_$name.c"
+    out="build/probe_$name"
+    printf '%s\n' "$code" > "$src"
+    if "$cc" -std=c11 -Wall -Wextra -Werror -o "$out" "$src" >/dev/null 2>&1; then
+        rm -f "$src" "$out"
+        return 0
+    fi
+    rm -f "$src" "$out"
+    return 1
+}
+
+have_mmap=0
+if try_compile mmap '#include <sys/mman.h>
+#include <stddef.h>
+int main(void) { void *p = MAP_FAILED; return p == MAP_FAILED ? 0 : 1; }'; then
+    have_mmap=1
+fi
+
+have_posix_fadvise=0
+if try_compile posix_fadvise '#define _POSIX_C_SOURCE 200809L
+#include <fcntl.h>
+int main(void) { return posix_fadvise(-1, 0, 0, POSIX_FADV_NORMAL); }'; then
+    have_posix_fadvise=1
+fi
+
+endian=unknown
+case $(uname -m 2>/dev/null || printf unknown) in
+    x86_64|amd64|aarch64|arm64) endian=little ;;
+esac
+
+cat > config.h <<EOF
+#ifndef RANK_CONFIG_H
+#define RANK_CONFIG_H
+
+#define RANK_VERSION "0.0.0-sprint01"
+#define RANK_HAVE_MMAP $have_mmap
+#define RANK_HAVE_POSIX_FADVISE $have_posix_fadvise
+#define RANK_ENDIAN_$endian 1
+
+#endif
+EOF
+
+cat > config.mk <<EOF
+CC ?= $cc
+SANITIZE_FLAGS ?= -fsanitize=address,undefined -fno-omit-frame-pointer
+LDLIBS ?=
+EOF
+
+printf 'configured rank: cc=%s mmap=%s posix_fadvise=%s endian=%s\n' "$cc" "$have_mmap" "$have_posix_fadvise" "$endian"
