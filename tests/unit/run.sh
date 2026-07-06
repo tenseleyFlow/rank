@@ -42,6 +42,27 @@ grep 'rank: comparator calls=' /tmp/rank-stats.err >/dev/null
 RANK_DEBUG_VERIFY=1 ./rank /tmp/rank-file.in >/tmp/rank-verify.out
 cmp /tmp/rank-verify.out /tmp/rank-file.want
 
+RANK_DEBUG_KEYS=1 ./rank -k2.3,4.5r -t, /tmp/rank-file.in >/tmp/rank-key.out 2>/tmp/rank-key.err
+grep 'rank: keys=1 field-separator=44 global-b=0 debug=0' /tmp/rank-key.err >/dev/null
+grep 'rank: key\[0\] start=2.3 end=4.5 start_b=0 end_b=0 reverse=1' /tmp/rank-key.err >/dev/null
+
+RANK_DEBUG_KEYS=1 ./rank -b --key=1b,2b /tmp/rank-file.in >/tmp/rank-key-b.out 2>/tmp/rank-key-b.err
+grep 'rank: keys=1 field-separator=default global-b=1 debug=0' /tmp/rank-key-b.err >/dev/null
+grep 'rank: key\[0\] start=1.0 end=2.0 start_b=1 end_b=1 reverse=0' /tmp/rank-key-b.err >/dev/null
+
+RANK_DEBUG_KEYS=1 ./rank --debug -k1 /tmp/rank-file.in >/tmp/rank-debug-key.out 2>/tmp/rank-debug-key.err
+grep 'rank: keys=1 field-separator=default global-b=0 debug=1' /tmp/rank-debug-key.err >/dev/null
+
+status=0
+./rank -k1,1n /tmp/rank-file.in >/tmp/rank-bad-key.out 2>/tmp/rank-bad-key.err || status=$?
+test "$status" -eq 2
+grep "rank: invalid key '1,1n': unsupported key modifier" /tmp/rank-bad-key.err >/dev/null
+
+status=0
+./rank -t,, /tmp/rank-file.in >/tmp/rank-bad-sep.out 2>/tmp/rank-bad-sep.err || status=$?
+test "$status" -eq 2
+grep "rank: field separator must be a single character: ',,'" /tmp/rank-bad-sep.err >/dev/null
+
 ./rank /tmp/rank-file.in -r > /tmp/rank-after-operand.out
 printf 'b\na\n' > /tmp/rank-after-operand.want
 cmp /tmp/rank-after-operand.out /tmp/rank-after-operand.want
@@ -60,5 +81,8 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-zero.out /tmp/rank-zero.want /tmp/rank-file.in /tmp/rank-file.out \
     /tmp/rank-file.want /tmp/rank-stats.out /tmp/rank-stats.err /tmp/rank-missing.out \
     /tmp/rank-missing.err /tmp/rank-verify.out /tmp/rank-after-operand.out \
-    /tmp/rank-after-operand.want
+    /tmp/rank-after-operand.want /tmp/rank-key.out /tmp/rank-key.err \
+    /tmp/rank-key-b.out /tmp/rank-key-b.err /tmp/rank-debug-key.out \
+    /tmp/rank-debug-key.err /tmp/rank-bad-key.out /tmp/rank-bad-key.err \
+    /tmp/rank-bad-sep.out /tmp/rank-bad-sep.err
 printf 'unit smoke ok\n'

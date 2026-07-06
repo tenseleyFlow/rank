@@ -5,6 +5,12 @@
 #include <stdio.h>
 #include <stddef.h>
 
+#include "key.h"
+
+enum {
+    RANK_MAX_FIELD_SEPARATOR_LEN = 1
+};
+
 enum {
     RANK_OPTIONS_OK = 0
 };
@@ -17,7 +23,14 @@ struct rank_options {
     bool stable;
     bool unique;
     bool zero_terminated;
+    bool ignore_leading_blanks;
+    bool debug;
+    bool has_field_separator;
+    unsigned char field_separator;
     const char *output_file;
+    struct rank_keydef *keys;
+    size_t key_count;
+    size_t key_cap;
     char **operands;
     size_t operand_count;
 };
