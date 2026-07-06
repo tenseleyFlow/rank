@@ -55,6 +55,8 @@ run_case key-multi 'b 2\na 2\nc 1\n' -k2,2 -k1,1
 run_case key-reverse 'a 1\nb 2\n' -k2,2r
 run_case key-global-reverse 'a 1\nb 2\n' -r -k2,2
 run_case key-blanks 'x   b\ny   a\n' -b -k2,2
+run_case obsolete-key 'b 1\na 2\n' +1
+run_case obsolete-key-range 'z 2\na 1\n' +0 -1
 
 printf 'z,2\na,1\n' | ./rank -t, -k2,2 > /tmp/rank-golden-sep.got
 printf 'a,1\nz,2\n' > /tmp/rank-golden-sep.want

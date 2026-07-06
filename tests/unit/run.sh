@@ -53,6 +53,9 @@ grep 'rank: key\[0\] start=1.0 end=2.0 start_b=1 end_b=1 reverse=0' /tmp/rank-ke
 RANK_DEBUG_KEYS=1 ./rank --debug -k1 /tmp/rank-file.in >/tmp/rank-debug-key.out 2>/tmp/rank-debug-key.err
 grep 'rank: keys=1 field-separator=default global-b=0 debug=1' /tmp/rank-debug-key.err >/dev/null
 
+RANK_DEBUG_KEYS=1 ./rank +0 -1 /tmp/rank-file.in >/tmp/rank-old-key.out 2>/tmp/rank-old-key.err
+grep 'rank: key\[0\] start=1.0 end=1.0 start_b=0 end_b=0 reverse=0' /tmp/rank-old-key.err >/dev/null
+
 status=0
 ./rank -k1,1n /tmp/rank-file.in >/tmp/rank-bad-key.out 2>/tmp/rank-bad-key.err || status=$?
 test "$status" -eq 2
@@ -84,5 +87,6 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-after-operand.want /tmp/rank-key.out /tmp/rank-key.err \
     /tmp/rank-key-b.out /tmp/rank-key-b.err /tmp/rank-debug-key.out \
     /tmp/rank-debug-key.err /tmp/rank-bad-key.out /tmp/rank-bad-key.err \
-    /tmp/rank-bad-sep.out /tmp/rank-bad-sep.err
+    /tmp/rank-bad-sep.out /tmp/rank-bad-sep.err /tmp/rank-old-key.out \
+    /tmp/rank-old-key.err
 printf 'unit smoke ok\n'

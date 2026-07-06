@@ -3,6 +3,7 @@
 #include "config.h"
 #include "util.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +12,10 @@ static const char *rank_basename(const char *path);
 static int add_key(struct rank_options *options, const char *text);
 static int set_field_separator(struct rank_options *options, const char *text);
 static void debug_dump_keys(const struct rank_options *options);
+static bool obsolete_key_start(const char *arg);
+static bool obsolete_key_end(const char *arg);
+static int add_obsolete_key(struct rank_options *options, const char *start, const char *end);
+static bool translate_obsolete_pos(const char *arg, bool end_pos, char *buf, size_t buf_len);
 
 void
 rank_options_init(struct rank_options *options, const char *argv0)
@@ -44,6 +49,17 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
     for (i = 1; i < argc; i++) {
         const char *arg = argv[i];
 
+        if (obsolete_key_start(arg)) {
+            const char *end = NULL;
+
+            if (i + 1 < argc && obsolete_key_end(argv[i + 1])) {
+                end = argv[++i];
+            }
+            if (add_obsolete_key(options, arg, end) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
         if (strcmp(arg, "--") == 0) {
             i++;
             while (i < argc) {
@@ -205,6 +221,86 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
     debug_dump_keys(options);
 
     return RANK_OPTIONS_OK;
+}
+
+static bool
+obsolete_key_start(const char *arg)
+{
+    return arg[0] == '+' && isdigit((unsigned char)arg[1]) != 0;
+}
+
+static bool
+obsolete_key_end(const char *arg)
+{
+    return arg[0] == '-' && isdigit((unsigned char)arg[1]) != 0;
+}
+
+static int
+add_obsolete_key(struct rank_options *options, const char *start, const char *end)
+{
+    char start_buf[64];
+    char end_buf[64];
+    char key_buf[160];
+
+    if (!translate_obsolete_pos(start, false, start_buf, sizeof(start_buf))) {
+        rank_diagf(options, "invalid obsolete key '%s'", start);
+        return RANK_EXIT_SERIOUS;
+    }
+    if (end != NULL) {
+        if (!translate_obsolete_pos(end, true, end_buf, sizeof(end_buf))) {
+            rank_diagf(options, "invalid obsolete key '%s'", end);
+            return RANK_EXIT_SERIOUS;
+        }
+        (void)snprintf(key_buf, sizeof(key_buf), "%s,%s", start_buf, end_buf);
+    } else {
+        (void)snprintf(key_buf, sizeof(key_buf), "%s", start_buf);
+    }
+    return add_key(options, key_buf);
+}
+
+static bool
+translate_obsolete_pos(const char *arg, bool end_pos, char *buf, size_t buf_len)
+{
+    const char *p = arg + 1;
+    unsigned long field = 0;
+    unsigned long character = 0;
+    bool has_character = false;
+    char *endptr;
+
+    field = strtoul(p, &endptr, 10);
+    if (endptr == p) {
+        return false;
+    }
+    p = endptr;
+    if (*p == '.') {
+        const char *char_start = p + 1;
+
+        character = strtoul(char_start, &endptr, 10);
+        if (endptr == char_start) {
+            return false;
+        }
+        has_character = true;
+        p = endptr;
+    }
+    if (*p != '\0') {
+        return false;
+    }
+
+    if (end_pos) {
+        if (field == 0) {
+            return false;
+        }
+        if (has_character) {
+            (void)snprintf(buf, buf_len, "%lu.%lu", field, character + 1UL);
+        } else {
+            (void)snprintf(buf, buf_len, "%lu", field);
+        }
+    } else if (has_character) {
+        (void)snprintf(buf, buf_len, "%lu.%lu", field + 1UL, character + 1UL);
+    } else {
+        (void)snprintf(buf, buf_len, "%lu", field + 1UL);
+    }
+    return true;
 }
 
 void
