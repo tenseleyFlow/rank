@@ -1,4 +1,5 @@
 .docs/refs/
+.fac/
 *.d
 *.o
 /build/
