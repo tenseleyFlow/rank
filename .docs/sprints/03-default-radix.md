@@ -22,6 +22,14 @@ Make rank fast for the baseline case: whole-line byte sorting in an identity col
 - Keep radix plan eligibility strict. If locale or options are not proven safe, fall back to scalar.
 - Sorting must operate on counted spans. No C string assumptions.
 
+## Subsprints
+
+- 03A - Plan gate: add explicit scalar/radix plan selection and only choose radix for whole-line byte sorts in `LC_ALL=C` or `LC_COLLATE=C`/`POSIX`.
+- 03B - Radix engine: implement stable MSD byte radix over whole-line spans with insertion fallback and bounded recursion.
+- 03C - Verification: add debug verification that radix output matches scalar ordering, plus GNU-backed golden fixtures for radix-eligible cases.
+- 03D - Reverse and unique: enable only the full-line `-r`, `-s`, `-u`, and `-z` cases proven equivalent by tests.
+- 03E - Perf pass: add warm-cache default workloads and record before/after GNU numbers.
+
 ## Parity tests
 
 - All Sprint 01 default fixtures through both scalar and radix plans.
