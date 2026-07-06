@@ -11,6 +11,7 @@
 
 static bool write_all(FILE *stream, const unsigned char *buf, size_t len);
 static bool write_debug_annotations(FILE *stream, const struct rank_lines *lines, const struct rank_options *options, const struct rank_line *line);
+static bool write_underline(FILE *stream, size_t off, size_t len);
 
 bool
 rank_output_lines(const struct rank_lines *lines, const struct rank_options *options)
@@ -30,7 +31,7 @@ rank_output_lines(const struct rank_lines *lines, const struct rank_options *opt
         }
     }
     if (options->debug) {
-        fprintf(stderr, "%s: debug: key annotations enabled\n", options->program_name);
+        fprintf(stderr, "%s: text ordering performed using simple byte comparison\n", options->program_name);
     }
 
     rank_cmp_context_init(&cmp, options, lines);
@@ -81,28 +82,42 @@ write_debug_annotations(FILE *stream, const struct rank_lines *lines, const stru
     for (k = 0; k < options->key_count; k++) {
         const struct rank_key_span *span = rank_line_key_span(lines, line, k);
         size_t off = (size_t)(span->ptr - line->text);
-        size_t i;
 
-        for (i = 0; i < off; i++) {
-            if (fputc(' ', stream) == EOF) {
-                return false;
-            }
-        }
         if (span->len == 0) {
             fprintf(stderr, "%s: debug: key %zu is empty for record %zu\n", options->program_name, k + 1U, line->ordinal + 1U);
-            if (fputc('^', stream) == EOF) {
-                return false;
-            }
-        } else {
-            for (i = 0; i < span->len; i++) {
-                if (fputc('_', stream) == EOF) {
-                    return false;
-                }
-            }
         }
-        if (fputc('\n', stream) == EOF) {
+        if (!write_underline(stream, off, span->len)) {
+            return false;
+        }
+    }
+    if (!(options->stable || options->unique)) {
+        if (!write_underline(stream, 0, line->len)) {
             return false;
         }
     }
     return true;
+}
+
+static bool
+write_underline(FILE *stream, size_t off, size_t len)
+{
+    size_t i;
+
+    for (i = 0; i < off; i++) {
+        if (fputc(' ', stream) == EOF) {
+            return false;
+        }
+    }
+    if (len == 0) {
+        if (fputc('^', stream) == EOF) {
+            return false;
+        }
+    } else {
+        for (i = 0; i < len; i++) {
+            if (fputc('_', stream) == EOF) {
+                return false;
+            }
+        }
+    }
+    return fputc('\n', stream) != EOF;
 }

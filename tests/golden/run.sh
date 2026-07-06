@@ -61,14 +61,21 @@ run_case key-blanks-late 'x   b\ny   a\n' -k2,2 -b
 run_case obsolete-key 'b 1\na 2\n' +1
 run_case obsolete-key-range 'z 2\na 1\n' +0 -1
 
-printf 'z 2\na 1\n' | ./rank --debug -b -k2,2 > /tmp/rank-golden-debug.got 2>/tmp/rank-golden-debug.err
-printf 'a 1\n  _\nz 2\n  _\n' > /tmp/rank-golden-debug.want
+printf 'z 2\na 1\n' > /tmp/rank-golden-debug.in
+./rank --debug -b -k2,2 /tmp/rank-golden-debug.in > /tmp/rank-golden-debug.got 2>/tmp/rank-golden-debug.err
+if test -n "$gnu_sort"; then
+    "$gnu_sort" --debug -b -k2,2 /tmp/rank-golden-debug.in > /tmp/rank-golden-debug.want 2>/tmp/rank-golden-debug-sort.err
+    sed 's/^sort:/rank:/' /tmp/rank-golden-debug-sort.err > /tmp/rank-golden-debug.err.want
+    cmp /tmp/rank-golden-debug.err /tmp/rank-golden-debug.err.want
+else
+    printf 'a 1\n  _\n___\nz 2\n  _\n___\n' > /tmp/rank-golden-debug.want
+fi
 cmp /tmp/rank-golden-debug.got /tmp/rank-golden-debug.want
-grep 'rank: debug: key annotations enabled' /tmp/rank-golden-debug.err >/dev/null
-rm -f /tmp/rank-golden-debug.got /tmp/rank-golden-debug.want /tmp/rank-golden-debug.err
+rm -f /tmp/rank-golden-debug.in /tmp/rank-golden-debug.got /tmp/rank-golden-debug.want \
+    /tmp/rank-golden-debug.err /tmp/rank-golden-debug-sort.err /tmp/rank-golden-debug.err.want
 
 printf 'b\na\n' | ./rank --debug -k2,2 > /tmp/rank-golden-debug-empty.got 2>/tmp/rank-golden-debug-empty.err
-printf 'a\n ^\nb\n ^\n' > /tmp/rank-golden-debug-empty.want
+printf 'a\n ^\n_\nb\n ^\n_\n' > /tmp/rank-golden-debug-empty.want
 cmp /tmp/rank-golden-debug-empty.got /tmp/rank-golden-debug-empty.want
 grep 'rank: debug: key 1 is empty for record 1' /tmp/rank-golden-debug-empty.err >/dev/null
 rm -f /tmp/rank-golden-debug-empty.got /tmp/rank-golden-debug-empty.want /tmp/rank-golden-debug-empty.err
