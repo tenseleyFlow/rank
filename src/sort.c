@@ -1,23 +1,51 @@
 #include "sort.h"
 
 #include "cmp.h"
+#include "radix.h"
 #include "util.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
+static bool scalar_sort_lines(struct rank_lines *lines, const struct rank_options *options);
 static void merge_sort_range(struct rank_line *items, struct rank_line *aux, size_t lo, size_t hi, struct rank_cmp_context *cmp);
 static void merge_ranges(struct rank_line *items, struct rank_line *aux, size_t lo, size_t mid, size_t hi, struct rank_cmp_context *cmp);
+static void reverse_lines(struct rank_lines *lines);
+static bool verify_sorted(const struct rank_lines *lines, const struct rank_options *options);
 
 bool
-rank_sort_lines(struct rank_lines *lines, const struct rank_options *options)
+rank_sort_lines(struct rank_lines *lines, const struct rank_options *options, const struct rank_plan *plan)
+{
+    bool ok;
+
+    if (getenv("RANK_DEBUG_PLAN") != NULL) {
+        fprintf(stderr, "rank: plan=%s reason=%s\n",
+            plan->kind == RANK_PLAN_RADIX_BYTES ? "radix-bytes" : "scalar",
+            plan->reason);
+    }
+
+    if (plan->kind == RANK_PLAN_RADIX_BYTES) {
+        ok = rank_radix_sort_lines(lines);
+        if (ok && options->reverse) {
+            reverse_lines(lines);
+        }
+    } else {
+        ok = scalar_sort_lines(lines, options);
+    }
+
+    if (ok && getenv("RANK_DEBUG_VERIFY") != NULL && !verify_sorted(lines, options)) {
+        return false;
+    }
+    return ok;
+}
+
+static bool
+scalar_sort_lines(struct rank_lines *lines, const struct rank_options *options)
 {
     struct rank_cmp_context cmp;
     struct rank_line *aux;
-    size_t i;
 
     if (lines->len < 2) {
         return true;
@@ -28,16 +56,6 @@ rank_sort_lines(struct rank_lines *lines, const struct rank_options *options)
     merge_sort_range(lines->items, aux, 0, lines->len, &cmp);
     if (getenv("RANK_DEBUG_STATS") != NULL) {
         fprintf(stderr, "rank: comparator calls=%zu bytes=%zu\n", cmp.calls, cmp.bytes);
-    }
-    if (getenv("RANK_DEBUG_VERIFY") != NULL) {
-        rank_cmp_context_init(&cmp, options, lines);
-        for (i = 1; i < lines->len; i++) {
-            if (rank_compare_lines(&cmp, &lines->items[i - 1U], &lines->items[i]) > 0) {
-                fprintf(stderr, "rank: internal sort verification failed at record %zu\n", i);
-                free(aux);
-                return false;
-            }
-        }
     }
     free(aux);
     return true;
@@ -82,4 +100,37 @@ merge_ranges(struct rank_line *items, struct rank_line *aux, size_t lo, size_t m
     for (i = lo; i < hi; i++) {
         items[i] = aux[i];
     }
+}
+
+static void
+reverse_lines(struct rank_lines *lines)
+{
+    size_t lo = 0;
+    size_t hi = lines->len;
+
+    while (lo < hi) {
+        struct rank_line tmp;
+
+        hi--;
+        tmp = lines->items[lo];
+        lines->items[lo] = lines->items[hi];
+        lines->items[hi] = tmp;
+        lo++;
+    }
+}
+
+static bool
+verify_sorted(const struct rank_lines *lines, const struct rank_options *options)
+{
+    struct rank_cmp_context cmp;
+    size_t i;
+
+    rank_cmp_context_init(&cmp, options, lines);
+    for (i = 1; i < lines->len; i++) {
+        if (rank_compare_lines(&cmp, &lines->items[i - 1U], &lines->items[i]) > 0) {
+            fprintf(stderr, "rank: internal sort verification failed at record %zu\n", i);
+            return false;
+        }
+    }
+    return true;
 }

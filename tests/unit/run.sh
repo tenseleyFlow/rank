@@ -36,11 +36,24 @@ printf 'b\na\n' > /tmp/rank-file.in
 printf 'a\nb\n' > /tmp/rank-file.want
 cmp /tmp/rank-file.out /tmp/rank-file.want
 
-RANK_DEBUG_STATS=1 ./rank /tmp/rank-file.in >/tmp/rank-stats.out 2>/tmp/rank-stats.err
+RANK_FORCE_SCALAR=1 RANK_DEBUG_STATS=1 ./rank /tmp/rank-file.in >/tmp/rank-stats.out 2>/tmp/rank-stats.err
 grep 'rank: comparator calls=' /tmp/rank-stats.err >/dev/null
 
 RANK_DEBUG_VERIFY=1 ./rank /tmp/rank-file.in >/tmp/rank-verify.out
 cmp /tmp/rank-verify.out /tmp/rank-file.want
+
+RANK_DEBUG_PLAN=1 ./rank /tmp/rank-file.in >/tmp/rank-plan.out 2>/tmp/rank-plan.err
+grep 'rank: plan=radix-bytes reason=whole-line byte radix' /tmp/rank-plan.err >/dev/null
+cmp /tmp/rank-plan.out /tmp/rank-file.want
+
+RANK_DEBUG_PLAN=1 ./rank -k1,1 /tmp/rank-file.in >/tmp/rank-plan-key.out 2>/tmp/rank-plan-key.err
+grep 'rank: plan=scalar reason=keyed sort' /tmp/rank-plan-key.err >/dev/null
+
+RANK_DEBUG_PLAN=1 ./rank --debug /tmp/rank-file.in >/tmp/rank-plan-debug.out 2>/tmp/rank-plan-debug.err
+grep 'rank: plan=scalar reason=debug output' /tmp/rank-plan-debug.err >/dev/null
+
+RANK_FORCE_SCALAR=1 RANK_DEBUG_PLAN=1 ./rank /tmp/rank-file.in >/tmp/rank-plan-force.out 2>/tmp/rank-plan-force.err
+grep 'rank: plan=scalar reason=forced scalar' /tmp/rank-plan-force.err >/dev/null
 
 RANK_DEBUG_KEYS=1 ./rank -k2.3,4.5r -t, /tmp/rank-file.in >/tmp/rank-key.out 2>/tmp/rank-key.err
 grep 'rank: keys=1 field-separator=44 global-b=0 debug=0' /tmp/rank-key.err >/dev/null
@@ -84,6 +97,9 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-zero.out /tmp/rank-zero.want /tmp/rank-file.in /tmp/rank-file.out \
     /tmp/rank-file.want /tmp/rank-stats.out /tmp/rank-stats.err /tmp/rank-missing.out \
     /tmp/rank-missing.err /tmp/rank-verify.out /tmp/rank-after-operand.out \
+    /tmp/rank-plan.out /tmp/rank-plan.err /tmp/rank-plan-key.out \
+    /tmp/rank-plan-key.err /tmp/rank-plan-debug.out /tmp/rank-plan-debug.err \
+    /tmp/rank-plan-force.out /tmp/rank-plan-force.err \
     /tmp/rank-after-operand.want /tmp/rank-key.out /tmp/rank-key.err \
     /tmp/rank-key-b.out /tmp/rank-key-b.err /tmp/rank-debug-key.out \
     /tmp/rank-debug-key.err /tmp/rank-bad-key.out /tmp/rank-bad-key.err \

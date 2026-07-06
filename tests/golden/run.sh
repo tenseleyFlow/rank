@@ -40,6 +40,9 @@ run_case() {
 run_case default 'b\na\n'
 run_case reverse 'a\nb\n' -r
 run_case unique 'b\na\nb\n' -u
+run_case radix-prefix 'aaa\naa\na\n'
+run_case radix-long-prefix 'prefix-0002\nprefix-0001\nprefix-0003\n'
+run_case radix-duplicates 'b\na\nb\na\n' -u
 run_case missing-newline 'b\na'
 run_case empty ''
 run_case single 'only\n'
@@ -60,6 +63,16 @@ run_case key-blanks 'x   b\ny   a\n' -b -k2,2
 run_case key-blanks-late 'x   b\ny   a\n' -k2,2 -b
 run_case obsolete-key 'b 1\na 2\n' +1
 run_case obsolete-key-range 'z 2\na 1\n' +0 -1
+
+printf 'delta\nalpha\ncharlie\nbravo\n' > /tmp/rank-golden-radix-verify.in
+RANK_DEBUG_VERIFY=1 ./rank /tmp/rank-golden-radix-verify.in > /tmp/rank-golden-radix-verify.got
+if test -n "$gnu_sort"; then
+    "$gnu_sort" /tmp/rank-golden-radix-verify.in > /tmp/rank-golden-radix-verify.want
+else
+    sort /tmp/rank-golden-radix-verify.in > /tmp/rank-golden-radix-verify.want
+fi
+cmp /tmp/rank-golden-radix-verify.got /tmp/rank-golden-radix-verify.want
+rm -f /tmp/rank-golden-radix-verify.in /tmp/rank-golden-radix-verify.got /tmp/rank-golden-radix-verify.want
 
 printf 'z 2\na 1\n' > /tmp/rank-golden-debug.in
 ./rank --debug -b -k2,2 /tmp/rank-golden-debug.in > /tmp/rank-golden-debug.got 2>/tmp/rank-golden-debug.err

@@ -47,7 +47,7 @@ main(int argc, char **argv)
         free(options.keys);
         return RANK_EXIT_SERIOUS;
     }
-    if (!rank_sort_lines(&lines, &options)) {
+    if (!rank_sort_lines(&lines, &options, &plan)) {
         exit_status = RANK_EXIT_SERIOUS;
     } else if (!rank_output_lines(&lines, &options)) {
         exit_status = RANK_EXIT_SERIOUS;
