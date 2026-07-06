@@ -23,6 +23,15 @@ Implement GNU key semantics and debug output. This sprint unlocks the workloads 
 - Keep spans into original input. Materialize only for transforms in later sprints.
 - Make key extraction separately unit-testable. Most later bugs will come from off-by-one field and character rules.
 
+## Subsprints
+
+- 02A - Key parser: parse `-k`, `--key`, `-t`, `-b`, per-key `r`, open-ended keys, and reject unsupported key modifiers clearly.
+- 02B - Field spans: precompute field starts and key spans for default blank splitting and explicit separators.
+- 02C - Keyed scalar compare: compare multiple precomputed key spans, implement per-key reverse, and preserve last-resort whole-line compare rules.
+- 02D - Stable and unique keyed behavior: make `-s` and `-u` operate on active keys instead of full-line identity.
+- 02E - Debug and obsolete syntax: add `--debug` annotations/warnings and accepted obsolete `+POS -POS` forms.
+- 02F - Coverage pass: expand golden/unit fixtures and sanitizer runs before Sprint 03.
+
 ## Parity tests
 
 - Single key: `-k1,1`, `-k2,2`, `-k1.2,1.4`, open-ended keys, end character 0.
