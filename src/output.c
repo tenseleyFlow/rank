@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 static bool write_all(FILE *stream, const unsigned char *buf, size_t len);
+static bool write_debug_annotations(FILE *stream, const struct rank_lines *lines, const struct rank_options *options, const struct rank_line *line);
 
 bool
 rank_output_lines(const struct rank_lines *lines, const struct rank_options *options)
@@ -28,6 +29,9 @@ rank_output_lines(const struct rank_lines *lines, const struct rank_options *opt
             return false;
         }
     }
+    if (options->debug) {
+        fprintf(stderr, "%s: debug: key annotations enabled\n", options->program_name);
+    }
 
     rank_cmp_context_init(&cmp, options, lines);
     for (i = 0; i < lines->len; i++) {
@@ -37,6 +41,11 @@ rank_output_lines(const struct rank_lines *lines, const struct rank_options *opt
             continue;
         }
         if (!write_all(stream, line->text, line->len) || fputc(delim, stream) == EOF) {
+            rank_diagf(options, "write failed: %s", strerror(errno));
+            ok = false;
+            break;
+        }
+        if (options->debug && !write_debug_annotations(stream, lines, options, line)) {
             rank_diagf(options, "write failed: %s", strerror(errno));
             ok = false;
             break;
@@ -59,4 +68,40 @@ static bool
 write_all(FILE *stream, const unsigned char *buf, size_t len)
 {
     return len == 0 || fwrite(buf, 1, len, stream) == len;
+}
+
+static bool
+write_debug_annotations(FILE *stream, const struct rank_lines *lines, const struct rank_options *options, const struct rank_line *line)
+{
+    size_t k;
+
+    if (options->key_count == 0) {
+        return true;
+    }
+    for (k = 0; k < options->key_count; k++) {
+        const struct rank_key_span *span = rank_line_key_span(lines, line, k);
+        size_t off = (size_t)(span->ptr - line->text);
+        size_t i;
+
+        for (i = 0; i < off; i++) {
+            if (fputc(' ', stream) == EOF) {
+                return false;
+            }
+        }
+        if (span->len == 0) {
+            if (fputc('^', stream) == EOF) {
+                return false;
+            }
+        } else {
+            for (i = 0; i < span->len; i++) {
+                if (fputc('_', stream) == EOF) {
+                    return false;
+                }
+            }
+        }
+        if (fputc('\n', stream) == EOF) {
+            return false;
+        }
+    }
+    return true;
 }

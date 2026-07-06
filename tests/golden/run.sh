@@ -58,6 +58,12 @@ run_case key-blanks 'x   b\ny   a\n' -b -k2,2
 run_case obsolete-key 'b 1\na 2\n' +1
 run_case obsolete-key-range 'z 2\na 1\n' +0 -1
 
+printf 'z 2\na 1\n' | ./rank --debug -b -k2,2 > /tmp/rank-golden-debug.got 2>/tmp/rank-golden-debug.err
+printf 'a 1\n  _\nz 2\n  _\n' > /tmp/rank-golden-debug.want
+cmp /tmp/rank-golden-debug.got /tmp/rank-golden-debug.want
+grep 'rank: debug: key annotations enabled' /tmp/rank-golden-debug.err >/dev/null
+rm -f /tmp/rank-golden-debug.got /tmp/rank-golden-debug.want /tmp/rank-golden-debug.err
+
 printf 'z,2\na,1\n' | ./rank -t, -k2,2 > /tmp/rank-golden-sep.got
 printf 'a,1\nz,2\n' > /tmp/rank-golden-sep.want
 cmp /tmp/rank-golden-sep.got /tmp/rank-golden-sep.want
