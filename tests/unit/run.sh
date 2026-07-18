@@ -46,33 +46,188 @@ RANK_DEBUG_PLAN=1 ./rank /tmp/rank-file.in >/tmp/rank-plan.out 2>/tmp/rank-plan.
 grep 'rank: plan=radix-bytes reason=whole-line byte radix' /tmp/rank-plan.err >/dev/null
 cmp /tmp/rank-plan.out /tmp/rank-file.want
 
+if locale -a 2>/dev/null | grep '^C.UTF-8$' >/dev/null; then
+    LC_ALL=C.UTF-8 RANK_DEBUG_PLAN=1 RANK_DEBUG_STATS=1 ./rank /tmp/rank-file.in >/tmp/rank-plan-cutf8.out 2>/tmp/rank-plan-cutf8.err
+    grep 'rank: plan=radix-transformed reason=whole-line transformed radix' /tmp/rank-plan-cutf8.err >/dev/null
+    grep 'rank: transformed radix ' /tmp/rank-plan-cutf8.err >/dev/null
+    cmp /tmp/rank-plan-cutf8.out /tmp/rank-file.want
+    LC_ALL=C.UTF-8 RANK_DEBUG_PLAN=1 RANK_DEBUG_STATS=1 ./rank -k1,1 /tmp/rank-file.in >/tmp/rank-plan-cutf8-key.out 2>/tmp/rank-plan-cutf8-key.err
+    grep 'rank: plan=radix-transformed reason=single transformed key radix' /tmp/rank-plan-cutf8-key.err >/dev/null
+    grep 'rank: transformed radix ' /tmp/rank-plan-cutf8-key.err >/dev/null
+    cmp /tmp/rank-plan-cutf8-key.out /tmp/rank-file.want
+fi
+
+RANK_DEBUG_STATS=1 ./rank /tmp/rank-file.in >/tmp/rank-radix-stats.out 2>/tmp/rank-radix-stats.err
+grep 'rank: radix ' /tmp/rank-radix-stats.err >/dev/null
+
+RANK_DEBUG_PLAN=1 RANK_DEBUG_STATS=1 ./rank -f /tmp/rank-file.in >/tmp/rank-plan-fold.out 2>/tmp/rank-plan-fold.err
+grep 'rank: plan=radix-transformed reason=whole-line filtered radix' /tmp/rank-plan-fold.err >/dev/null
+grep 'rank: transformed radix ' /tmp/rank-plan-fold.err >/dev/null
+RANK_DEBUG_PLAN=1 ./rank -fr /tmp/rank-file.in >/tmp/rank-plan-fold-r.out 2>/tmp/rank-plan-fold-r.err
+grep 'rank: plan=radix-transformed reason=whole-line filtered radix' /tmp/rank-plan-fold-r.err >/dev/null
+RANK_DEBUG_PLAN=1 ./rank -fu /tmp/rank-file.in >/tmp/rank-plan-fold-u.out 2>/tmp/rank-plan-fold-u.err
+grep 'rank: plan=radix-transformed reason=whole-line filtered radix' /tmp/rank-plan-fold-u.err >/dev/null
+RANK_DEBUG_PLAN=1 ./rank -fru /tmp/rank-file.in >/tmp/rank-plan-fold-ru.out 2>/tmp/rank-plan-fold-ru.err
+grep 'rank: plan=scalar reason=text modifier' /tmp/rank-plan-fold-ru.err >/dev/null
+
 RANK_DEBUG_PLAN=1 ./rank -k1,1 /tmp/rank-file.in >/tmp/rank-plan-key.out 2>/tmp/rank-plan-key.err
-grep 'rank: plan=scalar reason=keyed sort' /tmp/rank-plan-key.err >/dev/null
+grep 'rank: plan=radix-keys reason=single key byte radix' /tmp/rank-plan-key.err >/dev/null
+
+printf '10\n2\n-1\n1.5\n' > /tmp/rank-numeric.in
+RANK_DEBUG_PLAN=1 ./rank -n /tmp/rank-numeric.in >/tmp/rank-numeric.out 2>/tmp/rank-numeric.err
+printf -- '-1\n1.5\n2\n10\n' > /tmp/rank-numeric.want
+cmp /tmp/rank-numeric.out /tmp/rank-numeric.want
+grep 'rank: plan=scalar reason=special comparator' /tmp/rank-numeric.err >/dev/null
+
+printf 'a 10\nb 2\nc -1\n' > /tmp/rank-numeric-key.in
+./rank -k2,2n /tmp/rank-numeric-key.in >/tmp/rank-numeric-key.out
+printf 'c -1\nb 2\na 10\n' > /tmp/rank-numeric-key.want
+cmp /tmp/rank-numeric-key.out /tmp/rank-numeric-key.want
+
+./rank --sort=numeric /tmp/rank-numeric.in >/tmp/rank-numeric-sort-word.out
+cmp /tmp/rank-numeric-sort-word.out /tmp/rank-numeric.want
+
+printf '1e2\n10\n-inf\ninf\nnan\nx\n' > /tmp/rank-general-numeric.in
+RANK_DEBUG_PLAN=1 ./rank -g /tmp/rank-general-numeric.in >/tmp/rank-general-numeric.out 2>/tmp/rank-general-numeric.err
+printf 'x\nnan\n-inf\n10\n1e2\ninf\n' > /tmp/rank-general-numeric.want
+cmp /tmp/rank-general-numeric.out /tmp/rank-general-numeric.want
+grep 'rank: plan=scalar reason=special comparator' /tmp/rank-general-numeric.err >/dev/null
+
+./rank --sort=g /tmp/rank-general-numeric.in >/tmp/rank-general-numeric-sort-g.out
+cmp /tmp/rank-general-numeric-sort-g.out /tmp/rank-general-numeric.want
+
+printf 'x,b\ny,a\nz,a\n' > /tmp/rank-key-radix.in
+RANK_DEBUG_PLAN=1 RANK_DEBUG_STATS=1 ./rank -s -t, -k2,2 /tmp/rank-key-radix.in >/tmp/rank-key-radix.out 2>/tmp/rank-key-radix.err
+printf 'y,a\nz,a\nx,b\n' > /tmp/rank-key-radix.want
+cmp /tmp/rank-key-radix.out /tmp/rank-key-radix.want
+grep 'rank: plan=radix-keys reason=single stable key byte radix' /tmp/rank-key-radix.err >/dev/null
+grep 'rank: key radix passes=' /tmp/rank-key-radix.err >/dev/null
+
+RANK_DEBUG_PLAN=1 ./rank -t, -k2,2 /tmp/rank-key-radix.in >/tmp/rank-key-radix-last.out 2>/tmp/rank-key-radix-last.err
+printf 'y,a\nz,a\nx,b\n' > /tmp/rank-key-radix-last.want
+cmp /tmp/rank-key-radix-last.out /tmp/rank-key-radix-last.want
+grep 'rank: plan=radix-keys reason=single key byte radix' /tmp/rank-key-radix-last.err >/dev/null
+
+printf 'b,2\na,2\nc,1\n' > /tmp/rank-key-radix-multi.in
+RANK_DEBUG_PLAN=1 ./rank -s -t, -k2,2 -k1,1 /tmp/rank-key-radix-multi.in >/tmp/rank-key-radix-multi.out 2>/tmp/rank-key-radix-multi.err
+printf 'c,1\na,2\nb,2\n' > /tmp/rank-key-radix-multi.want
+cmp /tmp/rank-key-radix-multi.out /tmp/rank-key-radix-multi.want
+grep 'rank: plan=radix-keys reason=multi-key byte radix' /tmp/rank-key-radix-multi.err >/dev/null
+
+RANK_DEBUG_PLAN=1 ./rank -t, -k2,2 -k1,1 /tmp/rank-key-radix-multi.in >/tmp/rank-key-radix-multi-fallback.out 2>/tmp/rank-key-radix-multi-fallback.err
+grep 'rank: plan=scalar reason=keyed sort' /tmp/rank-key-radix-multi-fallback.err >/dev/null
+
+printf 'a,x,2\nb,x,1\na,x,1\nb,x,2\n' > /tmp/rank-key-radix-nkey.in
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -s -t, -k1,1 -k2,2 -k3,3 /tmp/rank-key-radix-nkey.in >/tmp/rank-key-radix-nkey.out 2>/tmp/rank-key-radix-nkey.err
+printf 'a,x,1\na,x,2\nb,x,1\nb,x,2\n' > /tmp/rank-key-radix-nkey.want
+cmp /tmp/rank-key-radix-nkey.out /tmp/rank-key-radix-nkey.want
+grep 'rank: plan=radix-keys reason=multi-key byte radix' /tmp/rank-key-radix-nkey.err >/dev/null
+
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -t, -k2,2r /tmp/rank-key-radix.in >/tmp/rank-key-radix-rev.out 2>/tmp/rank-key-radix-rev.err
+printf 'x,b\ny,a\nz,a\n' > /tmp/rank-key-radix-rev.want
+cmp /tmp/rank-key-radix-rev.out /tmp/rank-key-radix-rev.want
+grep 'rank: plan=radix-keys reason=single key byte radix' /tmp/rank-key-radix-rev.err >/dev/null
+
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -s -r -t, -k1,1 -k3,3 /tmp/rank-key-radix-nkey.in >/tmp/rank-key-radix-global-rev.out 2>/tmp/rank-key-radix-global-rev.err
+printf 'b,x,2\nb,x,1\na,x,2\na,x,1\n' > /tmp/rank-key-radix-global-rev.want
+cmp /tmp/rank-key-radix-global-rev.out /tmp/rank-key-radix-global-rev.want
+grep 'rank: plan=radix-keys reason=multi-key byte radix' /tmp/rank-key-radix-global-rev.err >/dev/null
+
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -s -t, -k1,1 -k3,3r /tmp/rank-key-radix-nkey.in >/tmp/rank-key-radix-mixed-rev.out 2>/tmp/rank-key-radix-mixed-rev.err
+printf 'a,x,2\na,x,1\nb,x,2\nb,x,1\n' > /tmp/rank-key-radix-mixed-rev.want
+cmp /tmp/rank-key-radix-mixed-rev.out /tmp/rank-key-radix-mixed-rev.want
+grep 'rank: plan=radix-keys reason=multi-key byte radix' /tmp/rank-key-radix-mixed-rev.err >/dev/null
+
+RANK_DEBUG_PLAN=1 ./rank -r -t, -k2,2 /tmp/rank-key-radix.in >/tmp/rank-key-radix-global-rev-fallback.out 2>/tmp/rank-key-radix-global-rev-fallback.err
+grep 'rank: plan=scalar reason=keyed sort' /tmp/rank-key-radix-global-rev-fallback.err >/dev/null
+
+printf 'z,a\na,a\nb,b\n' > /tmp/rank-key-radix-unique.in
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -u -t, -k2,2 /tmp/rank-key-radix-unique.in >/tmp/rank-key-radix-unique.out 2>/tmp/rank-key-radix-unique.err
+printf 'z,a\nb,b\n' > /tmp/rank-key-radix-unique.want
+cmp /tmp/rank-key-radix-unique.out /tmp/rank-key-radix-unique.want
+grep 'rank: plan=radix-keys reason=unique key byte radix' /tmp/rank-key-radix-unique.err >/dev/null
+
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -u -r -t, -k2,2 /tmp/rank-key-radix-unique.in >/tmp/rank-key-radix-unique-rev.out 2>/tmp/rank-key-radix-unique-rev.err
+printf 'b,b\nz,a\n' > /tmp/rank-key-radix-unique-rev.want
+cmp /tmp/rank-key-radix-unique-rev.out /tmp/rank-key-radix-unique-rev.want
+grep 'rank: plan=radix-keys reason=unique key byte radix' /tmp/rank-key-radix-unique-rev.err >/dev/null
+
+printf 'x,a,1\ny,a,1\nz,a,2\nw,b,1\n' > /tmp/rank-key-radix-unique-multi.in
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -u -t, -k2,2 -k3,3 /tmp/rank-key-radix-unique-multi.in >/tmp/rank-key-radix-unique-multi.out 2>/tmp/rank-key-radix-unique-multi.err
+printf 'x,a,1\nz,a,2\nw,b,1\n' > /tmp/rank-key-radix-unique-multi.want
+cmp /tmp/rank-key-radix-unique-multi.out /tmp/rank-key-radix-unique-multi.want
+grep 'rank: plan=radix-keys reason=unique key byte radix' /tmp/rank-key-radix-unique-multi.err >/dev/null
+
+printf 'c,3\nb,2\na,1\n' > /tmp/rank-key-radix-monotonic.in
+RANK_DEBUG_STATS=1 RANK_DEBUG_VERIFY=1 ./rank -s -t, -k2,2 /tmp/rank-key-radix-monotonic.in >/tmp/rank-key-radix-monotonic.out 2>/tmp/rank-key-radix-monotonic.err
+printf 'a,1\nb,2\nc,3\n' > /tmp/rank-key-radix-monotonic.want
+cmp /tmp/rank-key-radix-monotonic.out /tmp/rank-key-radix-monotonic.want
+grep 'rank: key radix passes=0 classified=0 insertion_sorts=0' /tmp/rank-key-radix-monotonic.err >/dev/null
 
 RANK_DEBUG_PLAN=1 ./rank --debug /tmp/rank-file.in >/tmp/rank-plan-debug.out 2>/tmp/rank-plan-debug.err
 grep 'rank: plan=scalar reason=debug output' /tmp/rank-plan-debug.err >/dev/null
+
+./rank -S 1K --buffer-size=2M -T /tmp --temporary-directory=/tmp --batch-size=8 --compress-program=gzip /tmp/rank-file.in >/tmp/rank-external-options.out
+cmp /tmp/rank-external-options.out /tmp/rank-file.want
+
+status=0
+./rank --buffer-size=bad /tmp/rank-file.in >/tmp/rank-bad-buffer.out 2>/tmp/rank-bad-buffer.err || status=$?
+test "$status" -eq 2
+grep "rank: invalid --buffer-size argument 'bad'" /tmp/rank-bad-buffer.err >/dev/null
+
+status=0
+./rank --batch-size=0 /tmp/rank-file.in >/tmp/rank-bad-batch.out 2>/tmp/rank-bad-batch.err || status=$?
+test "$status" -eq 2
+grep "rank: invalid --batch-size argument '0'" /tmp/rank-bad-batch.err >/dev/null
+
+status=0
+./rank -T '' /tmp/rank-file.in >/tmp/rank-bad-temp.out 2>/tmp/rank-bad-temp.err || status=$?
+test "$status" -eq 2
+grep 'rank: temporary directory name is empty' /tmp/rank-bad-temp.err >/dev/null
 
 RANK_FORCE_SCALAR=1 RANK_DEBUG_PLAN=1 ./rank /tmp/rank-file.in >/tmp/rank-plan-force.out 2>/tmp/rank-plan-force.err
 grep 'rank: plan=scalar reason=forced scalar' /tmp/rank-plan-force.err >/dev/null
 
 RANK_DEBUG_KEYS=1 ./rank -k2.3,4.5r -t, /tmp/rank-file.in >/tmp/rank-key.out 2>/tmp/rank-key.err
-grep 'rank: keys=1 field-separator=44 global-b=0 debug=0' /tmp/rank-key.err >/dev/null
-grep 'rank: key\[0\] start=2.3 end=4.5 start_b=0 end_b=0 reverse=1' /tmp/rank-key.err >/dev/null
+grep 'rank: keys=1 field-separator=44 global-b=0 global-d=0 global-f=0 global-i=0 debug=0' /tmp/rank-key.err >/dev/null
+grep 'rank: key\[0\] start=2.3 end=4.5 start_b=0 end_b=0 d=0 f=0 i=0 reverse=1' /tmp/rank-key.err >/dev/null
 
 RANK_DEBUG_KEYS=1 ./rank -b --key=1b,2b /tmp/rank-file.in >/tmp/rank-key-b.out 2>/tmp/rank-key-b.err
-grep 'rank: keys=1 field-separator=default global-b=1 debug=0' /tmp/rank-key-b.err >/dev/null
-grep 'rank: key\[0\] start=1.0 end=2.0 start_b=1 end_b=1 reverse=0' /tmp/rank-key-b.err >/dev/null
+grep 'rank: keys=1 field-separator=default global-b=1 global-d=0 global-f=0 global-i=0 debug=0' /tmp/rank-key-b.err >/dev/null
+grep 'rank: key\[0\] start=1.0 end=2.0 start_b=1 end_b=1 d=0 f=0 i=0 reverse=0' /tmp/rank-key-b.err >/dev/null
 
 RANK_DEBUG_KEYS=1 ./rank --debug -k1 /tmp/rank-file.in >/tmp/rank-debug-key.out 2>/tmp/rank-debug-key.err
-grep 'rank: keys=1 field-separator=default global-b=0 debug=1' /tmp/rank-debug-key.err >/dev/null
+grep 'rank: keys=1 field-separator=default global-b=0 global-d=0 global-f=0 global-i=0 debug=1' /tmp/rank-debug-key.err >/dev/null
 
 RANK_DEBUG_KEYS=1 ./rank +0 -1 /tmp/rank-file.in >/tmp/rank-old-key.out 2>/tmp/rank-old-key.err
-grep 'rank: key\[0\] start=1.0 end=1.0 start_b=0 end_b=0 reverse=0' /tmp/rank-old-key.err >/dev/null
+grep 'rank: key\[0\] start=1.0 end=1.0 start_b=0 end_b=0 d=0 f=0 i=0 reverse=0' /tmp/rank-old-key.err >/dev/null
+
+RANK_DEBUG_PLAN=1 ./rank -R tests/fixtures/random/basic.in >/tmp/rank-random.out 2>/tmp/rank-random.err
+./rank --sort=random tests/fixtures/random/basic.in >/tmp/rank-random-sort-word.out
+./rank -R tests/fixtures/random/basic.in >/tmp/rank-random-repeat.out
+cmp /tmp/rank-random.out /tmp/rank-random-sort-word.out
+cmp /tmp/rank-random.out /tmp/rank-random-repeat.out
+grep 'rank: plan=scalar reason=special comparator' /tmp/rank-random.err >/dev/null
+
+./rank -R --random-source=tests/fixtures/random/seed-a.bin tests/fixtures/random/basic.in >/tmp/rank-random-seed-a.out
+./rank -R --random-source tests/fixtures/random/seed-a.bin tests/fixtures/random/basic.in >/tmp/rank-random-seed-a-repeat.out
+./rank -R --random-source=tests/fixtures/random/seed-b.bin tests/fixtures/random/basic.in >/tmp/rank-random-seed-b.out
+cmp /tmp/rank-random-seed-a.out /tmp/rank-random-seed-a-repeat.out
+if cmp -s /tmp/rank-random-seed-a.out /tmp/rank-random-seed-b.out; then
+    printf 'random source did not affect output\n' >&2
+    exit 1
+fi
 
 status=0
-./rank -k1,1n /tmp/rank-file.in >/tmp/rank-bad-key.out 2>/tmp/rank-bad-key.err || status=$?
+./rank --random-source >/tmp/rank-random-bad-source.out 2>/tmp/rank-random-bad-source.err || status=$?
 test "$status" -eq 2
-grep "rank: invalid key '1,1n': unsupported key modifier" /tmp/rank-bad-key.err >/dev/null
+grep "rank: option '--random-source' requires an argument" /tmp/rank-random-bad-source.err >/dev/null
+
+./rank -t, -k2,2R tests/fixtures/random/keyed.csv >/tmp/rank-random-key.out
+./rank -t, -k2,2R tests/fixtures/random/keyed.csv >/tmp/rank-random-key-repeat.out
+cmp /tmp/rank-random-key.out /tmp/rank-random-key-repeat.out
+./rank -u -t, -k2,2R tests/fixtures/random/keyed-dups.csv >/tmp/rank-random-key-unique.out
+test "$(wc -l </tmp/rank-random-key-unique.out)" -eq 2
 
 status=0
 ./rank -t,, /tmp/rank-file.in >/tmp/rank-bad-sep.out 2>/tmp/rank-bad-sep.err || status=$?
@@ -97,12 +252,56 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-zero.out /tmp/rank-zero.want /tmp/rank-file.in /tmp/rank-file.out \
     /tmp/rank-file.want /tmp/rank-stats.out /tmp/rank-stats.err /tmp/rank-missing.out \
     /tmp/rank-missing.err /tmp/rank-verify.out /tmp/rank-after-operand.out \
-    /tmp/rank-plan.out /tmp/rank-plan.err /tmp/rank-plan-key.out \
+    /tmp/rank-plan.out /tmp/rank-plan.err /tmp/rank-plan-cutf8.out \
+    /tmp/rank-plan-cutf8.err /tmp/rank-plan-cutf8-key.out \
+    /tmp/rank-plan-cutf8-key.err /tmp/rank-plan-fold.out \
+    /tmp/rank-plan-fold.err /tmp/rank-plan-fold-r.out \
+    /tmp/rank-plan-fold-r.err /tmp/rank-plan-fold-u.out \
+    /tmp/rank-plan-fold-u.err /tmp/rank-plan-fold-ru.out \
+    /tmp/rank-plan-fold-ru.err /tmp/rank-plan-key.out \
+    /tmp/rank-radix-stats.out /tmp/rank-radix-stats.err \
     /tmp/rank-plan-key.err /tmp/rank-plan-debug.out /tmp/rank-plan-debug.err \
+    /tmp/rank-numeric.in /tmp/rank-numeric.out /tmp/rank-numeric.err \
+    /tmp/rank-numeric.want /tmp/rank-numeric-key.in /tmp/rank-numeric-key.out \
+    /tmp/rank-numeric-key.want /tmp/rank-numeric-sort-word.out \
+    /tmp/rank-general-numeric.in /tmp/rank-general-numeric.out \
+    /tmp/rank-general-numeric.err /tmp/rank-general-numeric.want \
+    /tmp/rank-general-numeric-sort-g.out \
     /tmp/rank-plan-force.out /tmp/rank-plan-force.err \
+    /tmp/rank-external-options.out /tmp/rank-bad-buffer.out /tmp/rank-bad-buffer.err \
+    /tmp/rank-bad-batch.out /tmp/rank-bad-batch.err \
+    /tmp/rank-bad-temp.out /tmp/rank-bad-temp.err \
     /tmp/rank-after-operand.want /tmp/rank-key.out /tmp/rank-key.err \
+    /tmp/rank-key-radix.in /tmp/rank-key-radix.out /tmp/rank-key-radix.err \
+    /tmp/rank-key-radix.want /tmp/rank-key-radix-last.out \
+    /tmp/rank-key-radix-last.err /tmp/rank-key-radix-last.want \
+    /tmp/rank-key-radix-multi.in /tmp/rank-key-radix-multi.out \
+    /tmp/rank-key-radix-multi.err /tmp/rank-key-radix-multi.want \
+    /tmp/rank-key-radix-multi-fallback.out /tmp/rank-key-radix-multi-fallback.err \
+    /tmp/rank-key-radix-nkey.in /tmp/rank-key-radix-nkey.out \
+    /tmp/rank-key-radix-nkey.err /tmp/rank-key-radix-nkey.want \
+    /tmp/rank-key-radix-rev.out /tmp/rank-key-radix-rev.err \
+    /tmp/rank-key-radix-rev.want /tmp/rank-key-radix-global-rev.out \
+    /tmp/rank-key-radix-global-rev.err /tmp/rank-key-radix-global-rev.want \
+    /tmp/rank-key-radix-mixed-rev.out /tmp/rank-key-radix-mixed-rev.err \
+    /tmp/rank-key-radix-mixed-rev.want /tmp/rank-key-radix-global-rev-fallback.out \
+    /tmp/rank-key-radix-global-rev-fallback.err \
+    /tmp/rank-key-radix-unique.in /tmp/rank-key-radix-unique.out \
+    /tmp/rank-key-radix-unique.err /tmp/rank-key-radix-unique.want \
+    /tmp/rank-key-radix-unique-rev.out /tmp/rank-key-radix-unique-rev.err \
+    /tmp/rank-key-radix-unique-rev.want /tmp/rank-key-radix-unique-multi.in \
+    /tmp/rank-key-radix-unique-multi.out /tmp/rank-key-radix-unique-multi.err \
+    /tmp/rank-key-radix-unique-multi.want \
+    /tmp/rank-key-radix-monotonic.in /tmp/rank-key-radix-monotonic.out \
+    /tmp/rank-key-radix-monotonic.err /tmp/rank-key-radix-monotonic.want \
     /tmp/rank-key-b.out /tmp/rank-key-b.err /tmp/rank-debug-key.out \
-    /tmp/rank-debug-key.err /tmp/rank-bad-key.out /tmp/rank-bad-key.err \
+    /tmp/rank-debug-key.err /tmp/rank-random.out \
+    /tmp/rank-random.err /tmp/rank-random-sort-word.out /tmp/rank-random-repeat.out \
+    /tmp/rank-random-seed-a.out /tmp/rank-random-seed-a-repeat.out \
+    /tmp/rank-random-seed-b.out \
+    /tmp/rank-random-bad-source.out /tmp/rank-random-bad-source.err \
+    /tmp/rank-random-key.out /tmp/rank-random-key-repeat.out \
+    /tmp/rank-random-key-unique.out \
     /tmp/rank-bad-sep.out /tmp/rank-bad-sep.err /tmp/rank-old-key.out \
     /tmp/rank-old-key.err
 printf 'unit smoke ok\n'

@@ -15,6 +15,12 @@ enum {
     RANK_OPTIONS_OK = 0
 };
 
+enum rank_check_mode {
+    RANK_CHECK_NONE = 0,
+    RANK_CHECK_DIAGNOSE_FIRST,
+    RANK_CHECK_QUIET
+};
+
 struct rank_options {
     const char *program_name;
     bool show_help;
@@ -22,12 +28,27 @@ struct rank_options {
     bool reverse;
     bool stable;
     bool unique;
+    bool merge;
     bool zero_terminated;
     bool ignore_leading_blanks;
+    bool ignore_case;
+    bool dictionary_order;
+    bool ignore_nonprinting;
     bool debug;
+    enum rank_check_mode check_mode;
+    enum rank_sort_mode sort_mode;
+    const char *random_source;
     bool has_field_separator;
     unsigned char field_separator;
     const char *output_file;
+    size_t buffer_size;
+    bool has_buffer_size;
+    char **temporary_dirs;
+    size_t temporary_dir_count;
+    size_t temporary_dir_cap;
+    size_t batch_size;
+    bool has_batch_size;
+    const char *compress_program;
     struct rank_keydef *keys;
     size_t key_count;
     size_t key_cap;

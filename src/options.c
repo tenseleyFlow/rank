@@ -4,13 +4,21 @@
 #include "util.h"
 
 #include <ctype.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
 static const char *rank_basename(const char *path);
 static int add_key(struct rank_options *options, const char *text);
+static int add_temporary_dir(struct rank_options *options, const char *text);
 static int set_field_separator(struct rank_options *options, const char *text);
+static int set_sort_mode(struct rank_options *options, const char *text);
+static int set_check_mode(struct rank_options *options, const char *text);
+static int set_buffer_size(struct rank_options *options, const char *text);
+static int set_batch_size(struct rank_options *options, const char *text);
 static void debug_dump_keys(const struct rank_options *options);
 static bool obsolete_key_start(const char *arg);
 static bool obsolete_key_end(const char *arg);
@@ -26,12 +34,27 @@ rank_options_init(struct rank_options *options, const char *argv0)
     options->reverse = false;
     options->stable = false;
     options->unique = false;
+    options->merge = false;
     options->zero_terminated = false;
     options->ignore_leading_blanks = false;
+    options->ignore_case = false;
+    options->dictionary_order = false;
+    options->ignore_nonprinting = false;
     options->debug = false;
+    options->check_mode = RANK_CHECK_NONE;
+    options->sort_mode = RANK_SORT_BYTE;
+    options->random_source = NULL;
     options->has_field_separator = false;
     options->field_separator = 0;
     options->output_file = NULL;
+    options->buffer_size = 0;
+    options->has_buffer_size = false;
+    options->temporary_dirs = NULL;
+    options->temporary_dir_count = 0;
+    options->temporary_dir_cap = 0;
+    options->batch_size = 0;
+    options->has_batch_size = false;
+    options->compress_program = NULL;
     options->keys = NULL;
     options->key_count = 0;
     options->key_cap = 0;
@@ -87,6 +110,10 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
             options->unique = true;
             continue;
         }
+        if (strcmp(arg, "--merge") == 0) {
+            options->merge = true;
+            continue;
+        }
         if (strcmp(arg, "--zero-terminated") == 0) {
             options->zero_terminated = true;
             continue;
@@ -95,8 +122,82 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
             options->ignore_leading_blanks = true;
             continue;
         }
+        if (strcmp(arg, "--ignore-case") == 0) {
+            options->ignore_case = true;
+            continue;
+        }
+        if (strcmp(arg, "--dictionary-order") == 0) {
+            options->dictionary_order = true;
+            continue;
+        }
+        if (strcmp(arg, "--ignore-nonprinting") == 0) {
+            options->ignore_nonprinting = true;
+            continue;
+        }
         if (strcmp(arg, "--debug") == 0) {
             options->debug = true;
+            continue;
+        }
+        if (strcmp(arg, "--check") == 0) {
+            options->check_mode = RANK_CHECK_DIAGNOSE_FIRST;
+            continue;
+        }
+        if (strncmp(arg, "--check=", 8) == 0) {
+            if (set_check_mode(options, arg + 8) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strcmp(arg, "--numeric-sort") == 0) {
+            options->sort_mode = RANK_SORT_NUMERIC;
+            continue;
+        }
+        if (strcmp(arg, "--general-numeric-sort") == 0) {
+            options->sort_mode = RANK_SORT_GENERAL_NUMERIC;
+            continue;
+        }
+        if (strcmp(arg, "--human-numeric-sort") == 0) {
+            options->sort_mode = RANK_SORT_HUMAN_NUMERIC;
+            continue;
+        }
+        if (strcmp(arg, "--month-sort") == 0) {
+            options->sort_mode = RANK_SORT_MONTH;
+            continue;
+        }
+        if (strcmp(arg, "--version-sort") == 0) {
+            options->sort_mode = RANK_SORT_VERSION;
+            continue;
+        }
+        if (strcmp(arg, "--random-sort") == 0) {
+            options->sort_mode = RANK_SORT_RANDOM;
+            continue;
+        }
+        if (strcmp(arg, "--random-source") == 0) {
+            if (i + 1 == argc) {
+                rank_diag(options, "option '--random-source' requires an argument");
+                return RANK_EXIT_SERIOUS;
+            }
+            options->random_source = argv[++i];
+            continue;
+        }
+        if (strncmp(arg, "--random-source=", 16) == 0) {
+            options->random_source = arg + 16;
+            continue;
+        }
+        if (strcmp(arg, "--sort") == 0) {
+            if (i + 1 == argc) {
+                rank_diag(options, "option '--sort' requires an argument");
+                return RANK_EXIT_SERIOUS;
+            }
+            if (set_sort_mode(options, argv[++i]) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strncmp(arg, "--sort=", 7) == 0) {
+            if (set_sort_mode(options, arg + 7) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
             continue;
         }
         if (strcmp(arg, "--key") == 0 || strcmp(arg, "-k") == 0) {
@@ -143,6 +244,66 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
             options->output_file = arg + 9;
             continue;
         }
+        if (strcmp(arg, "--buffer-size") == 0 || strcmp(arg, "-S") == 0) {
+            if (i + 1 == argc) {
+                rank_diagf(options, "option '%s' requires an argument", arg);
+                return RANK_EXIT_SERIOUS;
+            }
+            if (set_buffer_size(options, argv[++i]) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strncmp(arg, "--buffer-size=", 14) == 0) {
+            if (set_buffer_size(options, arg + 14) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strcmp(arg, "--temporary-directory") == 0 || strcmp(arg, "-T") == 0) {
+            if (i + 1 == argc) {
+                rank_diagf(options, "option '%s' requires an argument", arg);
+                return RANK_EXIT_SERIOUS;
+            }
+            if (add_temporary_dir(options, argv[++i]) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strncmp(arg, "--temporary-directory=", 22) == 0) {
+            if (add_temporary_dir(options, arg + 22) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strcmp(arg, "--batch-size") == 0) {
+            if (i + 1 == argc) {
+                rank_diag(options, "option '--batch-size' requires an argument");
+                return RANK_EXIT_SERIOUS;
+            }
+            if (set_batch_size(options, argv[++i]) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strncmp(arg, "--batch-size=", 13) == 0) {
+            if (set_batch_size(options, arg + 13) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strcmp(arg, "--compress-program") == 0) {
+            if (i + 1 == argc) {
+                rank_diag(options, "option '--compress-program' requires an argument");
+                return RANK_EXIT_SERIOUS;
+            }
+            options->compress_program = argv[++i];
+            continue;
+        }
+        if (strncmp(arg, "--compress-program=", 19) == 0) {
+            options->compress_program = arg + 19;
+            continue;
+        }
         if (strncmp(arg, "--", 2) == 0) {
             rank_diagf(options, "option '%s' is not implemented yet", arg);
             return RANK_EXIT_SERIOUS;
@@ -161,11 +322,47 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
                 case 'u':
                     options->unique = true;
                     break;
+                case 'm':
+                    options->merge = true;
+                    break;
                 case 'z':
                     options->zero_terminated = true;
                     break;
                 case 'b':
                     options->ignore_leading_blanks = true;
+                    break;
+                case 'f':
+                    options->ignore_case = true;
+                    break;
+                case 'd':
+                    options->dictionary_order = true;
+                    break;
+                case 'i':
+                    options->ignore_nonprinting = true;
+                    break;
+                case 'c':
+                    options->check_mode = RANK_CHECK_DIAGNOSE_FIRST;
+                    break;
+                case 'C':
+                    options->check_mode = RANK_CHECK_QUIET;
+                    break;
+                case 'n':
+                    options->sort_mode = RANK_SORT_NUMERIC;
+                    break;
+                case 'g':
+                    options->sort_mode = RANK_SORT_GENERAL_NUMERIC;
+                    break;
+                case 'h':
+                    options->sort_mode = RANK_SORT_HUMAN_NUMERIC;
+                    break;
+                case 'M':
+                    options->sort_mode = RANK_SORT_MONTH;
+                    break;
+                case 'V':
+                    options->sort_mode = RANK_SORT_VERSION;
+                    break;
+                case 'R':
+                    options->sort_mode = RANK_SORT_RANDOM;
                     break;
                 case 'k':
                     if (arg[j + 1] != '\0') {
@@ -204,6 +401,36 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
                         options->output_file = argv[++i];
                     } else {
                         rank_diag(options, "option '-o' requires an argument");
+                        return RANK_EXIT_SERIOUS;
+                    }
+                    j = strlen(arg) - 1;
+                    break;
+                case 'S':
+                    if (arg[j + 1] != '\0') {
+                        if (set_buffer_size(options, &arg[j + 1]) != RANK_OPTIONS_OK) {
+                            return RANK_EXIT_SERIOUS;
+                        }
+                    } else if (i + 1 < argc) {
+                        if (set_buffer_size(options, argv[++i]) != RANK_OPTIONS_OK) {
+                            return RANK_EXIT_SERIOUS;
+                        }
+                    } else {
+                        rank_diag(options, "option '-S' requires an argument");
+                        return RANK_EXIT_SERIOUS;
+                    }
+                    j = strlen(arg) - 1;
+                    break;
+                case 'T':
+                    if (arg[j + 1] != '\0') {
+                        if (add_temporary_dir(options, &arg[j + 1]) != RANK_OPTIONS_OK) {
+                            return RANK_EXIT_SERIOUS;
+                        }
+                    } else if (i + 1 < argc) {
+                        if (add_temporary_dir(options, argv[++i]) != RANK_OPTIONS_OK) {
+                            return RANK_EXIT_SERIOUS;
+                        }
+                    } else {
+                        rank_diag(options, "option '-T' requires an argument");
                         return RANK_EXIT_SERIOUS;
                     }
                     j = strlen(arg) - 1;
@@ -313,11 +540,29 @@ rank_options_print_help(FILE *stream)
     fprintf(stream, "  -r, --reverse  reverse the result of comparisons\n");
     fprintf(stream, "  -s, --stable   stabilize sort by disabling last-resort comparison\n");
     fprintf(stream, "  -u, --unique   output only the first of an equal run\n");
+    fprintf(stream, "  -m, --merge    merge already sorted files; do not sort\n");
     fprintf(stream, "  -z, --zero-terminated  line delimiter is NUL, not newline\n");
+    fprintf(stream, "  -c, --check  check whether input is sorted\n");
+    fprintf(stream, "  -C, --check=quiet, --check=silent  check without diagnostics\n");
     fprintf(stream, "  -o, --output=FILE  write result to FILE\n");
     fprintf(stream, "  -k, --key=KEYDEF  sort by a key definition\n");
     fprintf(stream, "  -t, --field-separator=SEP  use SEP as field separator\n");
     fprintf(stream, "  -b, --ignore-leading-blanks  ignore leading blanks in key starts\n");
+    fprintf(stream, "  -d, --dictionary-order  consider only blanks and alphanumeric characters\n");
+    fprintf(stream, "  -f, --ignore-case  fold lower case to upper case characters\n");
+    fprintf(stream, "  -i, --ignore-nonprinting  consider only printable characters\n");
+    fprintf(stream, "  -n, --numeric-sort  compare according to string numerical value\n");
+    fprintf(stream, "  -g, --general-numeric-sort  compare according to general numerical value\n");
+    fprintf(stream, "  -h, --human-numeric-sort  compare human readable numbers\n");
+    fprintf(stream, "  -M, --month-sort  compare month names\n");
+    fprintf(stream, "  -V, --version-sort  compare version strings\n");
+    fprintf(stream, "  -R, --random-sort  shuffle, grouping identical keys\n");
+    fprintf(stream, "      --random-source=FILE  get random bytes from FILE\n");
+    fprintf(stream, "      --sort=WORD  sort according to WORD\n");
+    fprintf(stream, "  -S, --buffer-size=SIZE  use SIZE for main memory buffer\n");
+    fprintf(stream, "  -T, --temporary-directory=DIR  use DIR for temporaries\n");
+    fprintf(stream, "      --batch-size=NMERGE  merge at most NMERGE inputs at once\n");
+    fprintf(stream, "      --compress-program=PROG  compress temporary runs with PROG\n");
 }
 
 void
@@ -366,6 +611,23 @@ add_key(struct rank_options *options, const char *text)
 }
 
 static int
+add_temporary_dir(struct rank_options *options, const char *text)
+{
+    if (text[0] == '\0') {
+        rank_diag(options, "temporary directory name is empty");
+        return RANK_EXIT_SERIOUS;
+    }
+    if (options->temporary_dir_count == options->temporary_dir_cap) {
+        size_t cap = options->temporary_dir_cap == 0 ? 2U : options->temporary_dir_cap * 2U;
+
+        options->temporary_dirs = rank_xrealloc(options->temporary_dirs, cap * sizeof(options->temporary_dirs[0]));
+        options->temporary_dir_cap = cap;
+    }
+    options->temporary_dirs[options->temporary_dir_count++] = (char *)text;
+    return RANK_OPTIONS_OK;
+}
+
+static int
 set_field_separator(struct rank_options *options, const char *text)
 {
     if (text[0] == '\0' || text[1] != '\0') {
@@ -375,6 +637,122 @@ set_field_separator(struct rank_options *options, const char *text)
     options->has_field_separator = true;
     options->field_separator = (unsigned char)text[0];
     return RANK_OPTIONS_OK;
+}
+
+static int
+set_check_mode(struct rank_options *options, const char *text)
+{
+    if (strcmp(text, "diagnose-first") == 0) {
+        options->check_mode = RANK_CHECK_DIAGNOSE_FIRST;
+        return RANK_OPTIONS_OK;
+    }
+    if (strcmp(text, "quiet") == 0 || strcmp(text, "silent") == 0) {
+        options->check_mode = RANK_CHECK_QUIET;
+        return RANK_OPTIONS_OK;
+    }
+    rank_diagf(options, "invalid --check argument '%s'", text);
+    return RANK_EXIT_SERIOUS;
+}
+
+static int
+set_buffer_size(struct rank_options *options, const char *text)
+{
+    char *endptr;
+    unsigned long long value;
+    unsigned long long scale = 1;
+
+    errno = 0;
+    value = strtoull(text, &endptr, 10);
+    if (endptr == text || errno == ERANGE) {
+        rank_diagf(options, "invalid --buffer-size argument '%s'", text);
+        return RANK_EXIT_SERIOUS;
+    }
+    if (*endptr != '\0') {
+        switch (*endptr) {
+        case 'K':
+        case 'k':
+            scale = 1024ULL;
+            endptr++;
+            break;
+        case 'M':
+        case 'm':
+            scale = 1024ULL * 1024ULL;
+            endptr++;
+            break;
+        case 'G':
+        case 'g':
+            scale = 1024ULL * 1024ULL * 1024ULL;
+            endptr++;
+            break;
+        default:
+            rank_diagf(options, "invalid --buffer-size argument '%s'", text);
+            return RANK_EXIT_SERIOUS;
+        }
+    }
+    if (*endptr != '\0') {
+        rank_diagf(options, "invalid --buffer-size argument '%s'", text);
+        return RANK_EXIT_SERIOUS;
+    }
+    if (value != 0 && scale > ULLONG_MAX / value) {
+        rank_diagf(options, "--buffer-size argument '%s' too large", text);
+        return RANK_EXIT_SERIOUS;
+    }
+    value *= scale;
+    if (value > (unsigned long long)SIZE_MAX) {
+        rank_diagf(options, "--buffer-size argument '%s' too large", text);
+        return RANK_EXIT_SERIOUS;
+    }
+    options->buffer_size = (size_t)value;
+    options->has_buffer_size = true;
+    return RANK_OPTIONS_OK;
+}
+
+static int
+set_batch_size(struct rank_options *options, const char *text)
+{
+    char *endptr;
+    unsigned long value;
+
+    errno = 0;
+    value = strtoul(text, &endptr, 10);
+    if (endptr == text || *endptr != '\0' || errno == ERANGE || value == 0 || value > (unsigned long)SIZE_MAX) {
+        rank_diagf(options, "invalid --batch-size argument '%s'", text);
+        return RANK_EXIT_SERIOUS;
+    }
+    options->batch_size = (size_t)value;
+    options->has_batch_size = true;
+    return RANK_OPTIONS_OK;
+}
+
+static int
+set_sort_mode(struct rank_options *options, const char *text)
+{
+    if (strcmp(text, "numeric") == 0 || strcmp(text, "n") == 0) {
+        options->sort_mode = RANK_SORT_NUMERIC;
+        return RANK_OPTIONS_OK;
+    }
+    if (strcmp(text, "general-numeric") == 0 || strcmp(text, "g") == 0) {
+        options->sort_mode = RANK_SORT_GENERAL_NUMERIC;
+        return RANK_OPTIONS_OK;
+    }
+    if (strcmp(text, "human-numeric") == 0 || strcmp(text, "h") == 0) {
+        options->sort_mode = RANK_SORT_HUMAN_NUMERIC;
+        return RANK_OPTIONS_OK;
+    }
+    if (strcmp(text, "month") == 0 || strcmp(text, "M") == 0) {
+        options->sort_mode = RANK_SORT_MONTH;
+        return RANK_OPTIONS_OK;
+    }
+    if (strcmp(text, "version") == 0 || strcmp(text, "V") == 0) {
+        options->sort_mode = RANK_SORT_VERSION;
+        return RANK_OPTIONS_OK;
+    }
+    if (strcmp(text, "random") == 0 || strcmp(text, "R") == 0) {
+        options->sort_mode = RANK_SORT_RANDOM;
+        return RANK_OPTIONS_OK;
+    }
+    rank_diagf(options, "unsupported sort mode '%s'", text);
+    return RANK_EXIT_SERIOUS;
 }
 
 static void
@@ -391,8 +769,11 @@ debug_dump_keys(const struct rank_options *options)
     } else {
         fprintf(stderr, "default");
     }
-    fprintf(stderr, " global-b=%u debug=%u\n",
+    fprintf(stderr, " global-b=%u global-d=%u global-f=%u global-i=%u debug=%u\n",
         options->ignore_leading_blanks ? 1U : 0U,
+        options->dictionary_order ? 1U : 0U,
+        options->ignore_case ? 1U : 0U,
+        options->ignore_nonprinting ? 1U : 0U,
         options->debug ? 1U : 0U);
     for (i = 0; i < options->key_count; i++) {
         char buf[128];

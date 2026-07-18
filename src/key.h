@@ -4,6 +4,16 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+enum rank_sort_mode {
+    RANK_SORT_BYTE = 0,
+    RANK_SORT_NUMERIC,
+    RANK_SORT_GENERAL_NUMERIC,
+    RANK_SORT_HUMAN_NUMERIC,
+    RANK_SORT_MONTH,
+    RANK_SORT_VERSION,
+    RANK_SORT_RANDOM
+};
+
 struct rank_key_span {
     const unsigned char *ptr;
     size_t len;
@@ -19,7 +29,11 @@ struct rank_keydef {
     bool has_end_char;
     bool ignore_start_blanks;
     bool ignore_end_blanks;
+    bool ignore_case;
+    bool dictionary_order;
+    bool ignore_nonprinting;
     bool reverse;
+    enum rank_sort_mode sort_mode;
 };
 
 bool rank_key_parse(const char *text, struct rank_keydef *key, char *error, size_t error_len);

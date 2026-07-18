@@ -46,7 +46,7 @@ void
 rank_key_format(const struct rank_keydef *key, char *buf, size_t buf_len)
 {
     (void)snprintf(buf, buf_len,
-        "start=%zu.%zu end=%s%zu.%zu start_b=%u end_b=%u reverse=%u",
+        "start=%zu.%zu end=%s%zu.%zu start_b=%u end_b=%u d=%u f=%u i=%u reverse=%u",
         key->start_field,
         key->has_start_char ? key->start_char : 0,
         key->has_end ? "" : "none:",
@@ -54,6 +54,9 @@ rank_key_format(const struct rank_keydef *key, char *buf, size_t buf_len)
         key->has_end_char ? key->end_char : 0,
         key->ignore_start_blanks ? 1U : 0U,
         key->ignore_end_blanks ? 1U : 0U,
+        key->dictionary_order ? 1U : 0U,
+        key->ignore_case ? 1U : 0U,
+        key->ignore_nonprinting ? 1U : 0U,
         key->reverse ? 1U : 0U);
 }
 
@@ -94,8 +97,35 @@ parse_modifiers(const char **text, struct rank_keydef *key, bool end_pos, char *
                 key->ignore_start_blanks = true;
             }
             break;
+        case 'd':
+            key->dictionary_order = true;
+            break;
+        case 'f':
+            key->ignore_case = true;
+            break;
+        case 'i':
+            key->ignore_nonprinting = true;
+            break;
         case 'r':
             key->reverse = true;
+            break;
+        case 'n':
+            key->sort_mode = RANK_SORT_NUMERIC;
+            break;
+        case 'g':
+            key->sort_mode = RANK_SORT_GENERAL_NUMERIC;
+            break;
+        case 'h':
+            key->sort_mode = RANK_SORT_HUMAN_NUMERIC;
+            break;
+        case 'M':
+            key->sort_mode = RANK_SORT_MONTH;
+            break;
+        case 'V':
+            key->sort_mode = RANK_SORT_VERSION;
+            break;
+        case 'R':
+            key->sort_mode = RANK_SORT_RANDOM;
             break;
         default:
             set_error(error, error_len, "unsupported key modifier");
