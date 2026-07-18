@@ -7,6 +7,7 @@
 
 #include "options.h"
 #include "key.h"
+#include "md5.h"
 #include "numeric.h"
 
 struct rank_line {
@@ -49,8 +50,8 @@ struct rank_lines {
     struct rank_human_numeric_value *key_human_numbers;
     struct rank_month_value *line_months;
     struct rank_month_value *key_months;
-    uint64_t *line_random;
-    uint64_t *key_random;
+    struct rank_md5_digest *line_random;
+    struct rank_md5_digest *key_random;
     size_t key_span_count;
 };
 
@@ -69,7 +70,7 @@ const struct rank_human_numeric_value *rank_line_human_number(const struct rank_
 const struct rank_human_numeric_value *rank_line_key_human_number(const struct rank_lines *lines, const struct rank_line *line, size_t key_id);
 const struct rank_month_value *rank_line_month(const struct rank_lines *lines, const struct rank_line *line);
 const struct rank_month_value *rank_line_key_month(const struct rank_lines *lines, const struct rank_line *line, size_t key_id);
-uint64_t rank_line_random(const struct rank_lines *lines, const struct rank_line *line);
-uint64_t rank_line_key_random(const struct rank_lines *lines, const struct rank_line *line, size_t key_id);
+const struct rank_md5_digest *rank_line_random(const struct rank_lines *lines, const struct rank_line *line);
+const struct rank_md5_digest *rank_line_key_random(const struct rank_lines *lines, const struct rank_line *line, size_t key_id);
 
 #endif

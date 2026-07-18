@@ -10,7 +10,7 @@ static int compare_modified_spans(struct rank_cmp_context *ctx, const unsigned c
 static bool span_modifier_keep(unsigned char byte, bool dictionary_order, bool ignore_nonprinting);
 static unsigned char span_modifier_fold(unsigned char byte, bool ignore_case);
 static int compare_transformed_spans(const struct rank_transformed_span *a, const struct rank_transformed_span *b);
-static int compare_random(uint64_t a, uint64_t b);
+static int compare_random(const struct rank_md5_digest *a, const struct rank_md5_digest *b);
 static int compare_keys(struct rank_cmp_context *ctx, const struct rank_line *a, const struct rank_line *b);
 
 void
@@ -244,13 +244,12 @@ compare_transformed_spans(const struct rank_transformed_span *a, const struct ra
 }
 
 static int
-compare_random(uint64_t a, uint64_t b)
+compare_random(const struct rank_md5_digest *a, const struct rank_md5_digest *b)
 {
-    if (a < b) {
-        return -1;
-    }
-    if (a > b) {
-        return 1;
+    int result = memcmp(a->bytes, b->bytes, sizeof(a->bytes));
+
+    if (result != 0) {
+        return result < 0 ? -1 : 1;
     }
     return 0;
 }

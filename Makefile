@@ -9,6 +9,7 @@ SRC = \
 	src/radix.c \
 	src/sort.c \
 	src/cmp.c \
+	src/md5.c \
 	src/numeric.c \
 	src/locale.c \
 	src/merge.c \

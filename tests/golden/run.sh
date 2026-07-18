@@ -129,6 +129,7 @@ if locale_available en_US.UTF-8; then
     run_locale_case en_US.UTF-8 en-us-key 'x éclair\ny eagle\nz Éclair\nw ábaco\n' -k2,2
     run_locale_case en_US.UTF-8 en-us-nul 'b\000z\nb\000a\na\000z\nb\nab\n'
     run_locale_case en_US.UTF-8 en-us-nul-eclair 'éclair\000z\néclair\000a\neagle\000z\néclair\n'
+    run_locale_case en_US.UTF-8 en-us-random 'éclair\neagle\nÉclair\nábaco\ndelta\n' -R --random-source=tests/fixtures/random/seed-a.bin
 fi
 run_case missing-newline 'b\na'
 run_case empty ''
@@ -235,6 +236,12 @@ run_case key-blanks 'x   b\ny   a\n' -b -k2,2
 run_case key-blanks-late 'x   b\ny   a\n' -k2,2 -b
 run_case obsolete-key 'b 1\na 2\n' +1
 run_case obsolete-key-range 'z 2\na 1\n' +0 -1
+run_case random-seeded 'delta\nalpha\nbravo\ncharlie\necho\nfox\n' -R --random-source=tests/fixtures/random/seed-a.bin
+run_case random-seeded-b 'delta\nalpha\nbravo\ncharlie\necho\nfox\n' -R --random-source=tests/fixtures/random/seed-b.bin
+run_case random-seeded-reverse 'delta\nalpha\nbravo\ncharlie\n' -R -r --random-source=tests/fixtures/random/seed-a.bin
+run_case random-seeded-unique 'b\na\nb\nc\na\n' -R -u --random-source=tests/fixtures/random/seed-a.bin
+run_case random-seeded-key 'x b\ny a\nz c\nw a\n' -k2,2R --random-source=tests/fixtures/random/seed-a.bin
+run_case random-seeded-fold 'a\nA\nb\nB\nc\n' -R -f --random-source=tests/fixtures/random/seed-a.bin
 run_check_case check-sorted 'a\nb\nc\n' -c
 run_check_case check-unsorted 'b\na\n' -c
 run_check_case check-quiet 'b\na\n' -C

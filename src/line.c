@@ -35,8 +35,9 @@ static size_t max_blank_key_field(const struct rank_options *options);
 static size_t max_explicit_key_field(const struct rank_options *options);
 static void fill_explicit_field_cache(const struct rank_line *line, unsigned char sep, size_t max_field, size_t *field_starts, size_t *field_ends);
 static void fill_blank_field_cache(const struct rank_line *line, size_t max_field, size_t *blank_starts, size_t *text_starts, size_t *field_ends);
-static bool random_seed_from_options(const struct rank_options *options, uint64_t *seed);
-static uint64_t random_hash(uint64_t seed, const unsigned char *text, size_t len);
+static bool random_state_from_options(const struct rank_options *options, struct rank_md5_ctx *base);
+static void compute_random_digest(const struct rank_md5_ctx *base, const struct rank_options *options, const struct rank_keydef *key, const unsigned char *text, size_t len, struct rank_md5_digest *out, unsigned char **scratch, size_t *scratch_cap);
+static void ensure_scratch(unsigned char **scratch, size_t *scratch_cap, size_t needed);
 static bool prepare_line_transforms(struct rank_lines *lines, const struct rank_options *options);
 static bool prepare_key_transform(struct rank_lines *lines, const struct rank_options *options, const struct rank_keydef *key, size_t index, const struct rank_key_span *span);
 static bool append_transform_span(struct rank_lines *lines, const unsigned char *text, size_t len, struct rank_transformed_span *out);
@@ -174,7 +175,9 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
     bool locale_identity = rank_locale_collation_identity();
     bool want_line_transforms = options->sort_mode == RANK_SORT_BYTE && (!locale_identity || (locale_identity && global_text_modifier(options)));
     bool want_key_transforms = false;
-    uint64_t random_seed = 0;
+    struct rank_md5_ctx random_base;
+    unsigned char *random_scratch = NULL;
+    size_t random_scratch_cap = 0;
     size_t i;
     size_t k;
 
@@ -200,13 +203,15 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
                 lines->line_months[lines->items[i].ordinal] = rank_month_parse(lines->items[i].text, lines->items[i].len);
             }
         } else if (options->sort_mode == RANK_SORT_RANDOM) {
-            if (!random_seed_from_options(options, &random_seed)) {
+            if (!random_state_from_options(options, &random_base)) {
                 return false;
             }
             lines->line_random = rank_xrealloc(lines->line_random, lines->len * sizeof(lines->line_random[0]));
             for (i = 0; i < lines->len; i++) {
-                lines->line_random[lines->items[i].ordinal] = random_hash(random_seed, lines->items[i].text, lines->items[i].len);
+                compute_random_digest(&random_base, options, NULL, lines->items[i].text, lines->items[i].len, &lines->line_random[lines->items[i].ordinal], &random_scratch, &random_scratch_cap);
             }
+            free(random_scratch);
+            random_scratch = NULL;
         }
         if (want_line_transforms && !prepare_line_transforms(lines, options)) {
             return false;
@@ -257,7 +262,7 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
     } else if (options->sort_mode == RANK_SORT_MONTH) {
         lines->line_months = rank_xrealloc(lines->line_months, lines->len * sizeof(lines->line_months[0]));
     } else if (options->sort_mode == RANK_SORT_RANDOM) {
-        if (!random_seed_from_options(options, &random_seed)) {
+        if (!random_state_from_options(options, &random_base)) {
             return false;
         }
         lines->line_random = rank_xrealloc(lines->line_random, lines->len * sizeof(lines->line_random[0]));
@@ -275,7 +280,7 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
         lines->key_months = rank_xrealloc(lines->key_months, lines->key_span_count * sizeof(lines->key_months[0]));
     }
     if (want_key_random) {
-        if (options->sort_mode != RANK_SORT_RANDOM && !random_seed_from_options(options, &random_seed)) {
+        if (options->sort_mode != RANK_SORT_RANDOM && !random_state_from_options(options, &random_base)) {
             return false;
         }
         lines->key_random = rank_xrealloc(lines->key_random, lines->key_span_count * sizeof(lines->key_random[0]));
@@ -305,7 +310,7 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
         } else if (options->sort_mode == RANK_SORT_MONTH) {
             lines->line_months[lines->items[i].ordinal] = rank_month_parse(lines->items[i].text, lines->items[i].len);
         } else if (options->sort_mode == RANK_SORT_RANDOM) {
-            lines->line_random[lines->items[i].ordinal] = random_hash(random_seed, lines->items[i].text, lines->items[i].len);
+            compute_random_digest(&random_base, options, NULL, lines->items[i].text, lines->items[i].len, &lines->line_random[lines->items[i].ordinal], &random_scratch, &random_scratch_cap);
         }
         if (want_line_transforms && !append_transform_span(lines, lines->items[i].text, lines->items[i].len, &lines->line_transforms[lines->items[i].ordinal])) {
             return false;
@@ -346,7 +351,7 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
             if (want_key_random && (options->sort_mode == RANK_SORT_RANDOM || options->keys[k].sort_mode == RANK_SORT_RANDOM)) {
                 const struct rank_key_span *span = &lines->key_spans[lines->items[i].key_index + k];
 
-                lines->key_random[lines->items[i].key_index + k] = random_hash(random_seed, span->ptr, span->len);
+                compute_random_digest(&random_base, options, &options->keys[k], span->ptr, span->len, &lines->key_random[lines->items[i].key_index + k], &random_scratch, &random_scratch_cap);
             }
             if (want_key_transforms && options->keys[k].sort_mode == RANK_SORT_BYTE && options->sort_mode == RANK_SORT_BYTE) {
                 const struct rank_key_span *span = &lines->key_spans[lines->items[i].key_index + k];
@@ -357,6 +362,7 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
             }
         }
     }
+    free(random_scratch);
     free(explicit_ends);
     free(explicit_starts);
     free(field_ends);
@@ -617,16 +623,16 @@ rank_line_key_month(const struct rank_lines *lines, const struct rank_line *line
     return &lines->key_months[line->key_index + key_id];
 }
 
-uint64_t
+const struct rank_md5_digest *
 rank_line_random(const struct rank_lines *lines, const struct rank_line *line)
 {
-    return lines->line_random[line->ordinal];
+    return &lines->line_random[line->ordinal];
 }
 
-uint64_t
+const struct rank_md5_digest *
 rank_line_key_random(const struct rank_lines *lines, const struct rank_line *line, size_t key_id)
 {
-    return lines->key_random[line->key_index + key_id];
+    return &lines->key_random[line->key_index + key_id];
 }
 
 static bool
@@ -1090,64 +1096,108 @@ fill_blank_field_cache(const struct rank_line *line, size_t max_field, size_t *b
     }
 }
 
+/* GNU seeds a shared MD5 state with 16 bytes: from --random-source when
+   given (only the first 16 bytes; fewer is a fatal end-of-file), else
+   from system randomness. Each key's ordering hash continues from a
+   copy of that state. */
 static bool
-random_seed_from_options(const struct rank_options *options, uint64_t *seed)
+random_state_from_options(const struct rank_options *options, struct rank_md5_ctx *base)
 {
-    uint64_t h = UINT64_C(1469598103934665603);
-    unsigned char buf[4096];
+    unsigned char seed[16];
+    const char *name = options->random_source;
+    size_t got = 0;
     int fd;
 
-    if (options->random_source == NULL) {
-        *seed = h ^ UINT64_C(0x72616e6b2d522d31);
-        return true;
-    }
-
-    fd = open(options->random_source, O_RDONLY);
+    fd = open(name != NULL ? name : "/dev/urandom", O_RDONLY);
     if (fd < 0) {
-        rank_diagf(options, "cannot read random source: %s: %s", options->random_source, strerror(errno));
+        rank_diagf(options, "open failed: %s: %s", name != NULL ? name : "getrandom", strerror(errno));
         return false;
     }
-    for (;;) {
-        ssize_t nread = read(fd, buf, sizeof(buf));
-        size_t i;
+    while (got < sizeof(seed)) {
+        ssize_t nread = read(fd, seed + got, sizeof(seed) - got);
 
         if (nread < 0) {
-            rank_diagf(options, "cannot read random source: %s: %s", options->random_source, strerror(errno));
+            rank_diagf(options, "read failed: %s: %s", name != NULL ? name : "getrandom", strerror(errno));
             (void)close(fd);
             return false;
         }
         if (nread == 0) {
-            break;
+            rank_diagf(options, "'%s': end of file", name != NULL ? name : "getrandom");
+            (void)close(fd);
+            return false;
         }
-        for (i = 0; i < (size_t)nread; i++) {
-            h ^= (uint64_t)buf[i];
-            h *= UINT64_C(1099511628211);
-        }
+        got += (size_t)nread;
     }
     if (close(fd) != 0) {
-        rank_diagf(options, "cannot close random source: %s: %s", options->random_source, strerror(errno));
+        rank_diagf(options, "close failed: %s: %s", name != NULL ? name : "getrandom", strerror(errno));
         return false;
     }
-    *seed = h;
+    rank_md5_init(base);
+    rank_md5_update(base, seed, sizeof(seed));
     return true;
 }
 
-static uint64_t
-random_hash(uint64_t seed, const unsigned char *text, size_t len)
+static void
+ensure_scratch(unsigned char **scratch, size_t *scratch_cap, size_t needed)
 {
-    uint64_t h = seed ^ UINT64_C(0x9e3779b97f4a7c15);
-    size_t i;
-
-    for (i = 0; i < len; i++) {
-        h ^= (uint64_t)text[i];
-        h *= UINT64_C(1099511628211);
+    if (needed <= *scratch_cap) {
+        return;
     }
-    h ^= h >> 33;
-    h *= UINT64_C(0xff51afd7ed558ccd);
-    h ^= h >> 33;
-    h *= UINT64_C(0xc4ceb9fe1a85ec53);
-    h ^= h >> 33;
-    return h;
+    *scratch = rank_xrealloc(*scratch, needed);
+    *scratch_cap = needed;
+}
+
+/* GNU compare_random hashes the comparison basis of the key: raw bytes
+   in identity collation, translated bytes when f/d/i modifiers apply,
+   and in hard locales the strxfrm of each NUL-terminated segment plus
+   its terminating NUL. */
+static void
+compute_random_digest(const struct rank_md5_ctx *base, const struct rank_options *options, const struct rank_keydef *key, const unsigned char *text, size_t len, struct rank_md5_digest *out, unsigned char **scratch, size_t *scratch_cap)
+{
+    struct rank_md5_ctx ctx = *base;
+    bool fold_case = options->ignore_case || (key != NULL && key->ignore_case);
+    bool dictionary = options->dictionary_order || (key != NULL && key->dictionary_order);
+    bool nonprinting = options->ignore_nonprinting || (key != NULL && key->ignore_nonprinting);
+
+    if (!rank_locale_collation_identity()) {
+        size_t copy_len = len + 1U;
+        size_t pos = 0;
+
+        ensure_scratch(scratch, scratch_cap, copy_len);
+        memcpy(*scratch, text, len);
+        (*scratch)[len] = '\0';
+        while (pos < copy_len) {
+            const char *seg = (const char *)*scratch + pos;
+            size_t seg_len = strlen(seg);
+            size_t needed = strxfrm(NULL, seg, 0);
+
+            ensure_scratch(scratch, scratch_cap, copy_len + needed + 1U);
+            seg = (const char *)*scratch + pos;
+            (void)strxfrm((char *)*scratch + copy_len, seg, needed + 1U);
+            rank_md5_update(&ctx, *scratch + copy_len, needed + 1U);
+            pos += seg_len + 1U;
+        }
+    } else if (fold_case || dictionary || nonprinting) {
+        unsigned char chunk[256];
+        size_t n = 0;
+        size_t i;
+
+        for (i = 0; i < len; i++) {
+            if (filtered_keep(text[i], dictionary, nonprinting)) {
+                chunk[n++] = filtered_fold(text[i], fold_case);
+                if (n == sizeof(chunk)) {
+                    rank_md5_update(&ctx, chunk, n);
+                    n = 0;
+                }
+            }
+        }
+        if (n > 0) {
+            rank_md5_update(&ctx, chunk, n);
+        }
+    } else {
+        rank_md5_update(&ctx, text, len);
+    }
+    rank_md5_final(&ctx, out->bytes);
 }
 
 static size_t

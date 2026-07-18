@@ -209,11 +209,10 @@ RANK_DEBUG_KEYS=1 ./rank +0 -1 /tmp/rank-file.in >/tmp/rank-old-key.out 2>/tmp/r
 grep 'rank: key\[0\] start=1.0 end=1.0 start_b=0 end_b=0 d=0 f=0 i=0 reverse=0' /tmp/rank-old-key.err >/dev/null
 
 RANK_DEBUG_PLAN=1 ./rank -R tests/fixtures/random/basic.in >/tmp/rank-random.out 2>/tmp/rank-random.err
-./rank --sort=random tests/fixtures/random/basic.in >/tmp/rank-random-sort-word.out
-./rank -R tests/fixtures/random/basic.in >/tmp/rank-random-repeat.out
-cmp /tmp/rank-random.out /tmp/rank-random-sort-word.out
-cmp /tmp/rank-random.out /tmp/rank-random-repeat.out
 grep 'rank: plan=scalar reason=special comparator' /tmp/rank-random.err >/dev/null
+sort /tmp/rank-random.out >/tmp/rank-random.content
+sort tests/fixtures/random/basic.in >/tmp/rank-random.content.want
+cmp /tmp/rank-random.content /tmp/rank-random.content.want
 
 ./rank -R --random-source=tests/fixtures/random/seed-a.bin tests/fixtures/random/basic.in >/tmp/rank-random-seed-a.out
 ./rank -R --random-source tests/fixtures/random/seed-a.bin tests/fixtures/random/basic.in >/tmp/rank-random-seed-a-repeat.out
@@ -224,15 +223,23 @@ if cmp -s /tmp/rank-random-seed-a.out /tmp/rank-random-seed-b.out; then
     exit 1
 fi
 
+./rank --sort=random --random-source=tests/fixtures/random/seed-a.bin tests/fixtures/random/basic.in >/tmp/rank-random-sort-word.out
+cmp /tmp/rank-random-sort-word.out /tmp/rank-random-seed-a.out
+
+status=0
+./rank -R --random-source=tests/fixtures/random/seed-short.bin tests/fixtures/random/basic.in >/tmp/rank-random-short.out 2>/tmp/rank-random-short.err || status=$?
+test "$status" -eq 2
+grep "rank: 'tests/fixtures/random/seed-short.bin': end of file" /tmp/rank-random-short.err >/dev/null
+
 status=0
 ./rank --random-source >/tmp/rank-random-bad-source.out 2>/tmp/rank-random-bad-source.err || status=$?
 test "$status" -eq 2
 grep "rank: option '--random-source' requires an argument" /tmp/rank-random-bad-source.err >/dev/null
 
-./rank -t, -k2,2R tests/fixtures/random/keyed.csv >/tmp/rank-random-key.out
-./rank -t, -k2,2R tests/fixtures/random/keyed.csv >/tmp/rank-random-key-repeat.out
+./rank -t, -k2,2R --random-source=tests/fixtures/random/seed-a.bin tests/fixtures/random/keyed.csv >/tmp/rank-random-key.out
+./rank -t, -k2,2R --random-source=tests/fixtures/random/seed-a.bin tests/fixtures/random/keyed.csv >/tmp/rank-random-key-repeat.out
 cmp /tmp/rank-random-key.out /tmp/rank-random-key-repeat.out
-./rank -u -t, -k2,2R tests/fixtures/random/keyed-dups.csv >/tmp/rank-random-key-unique.out
+./rank -u -t, -k2,2R --random-source=tests/fixtures/random/seed-a.bin tests/fixtures/random/keyed-dups.csv >/tmp/rank-random-key-unique.out
 test "$(wc -l </tmp/rank-random-key-unique.out)" -eq 2
 
 status=0
@@ -303,7 +310,9 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-key-radix-monotonic.err /tmp/rank-key-radix-monotonic.want \
     /tmp/rank-key-b.out /tmp/rank-key-b.err /tmp/rank-debug-key.out \
     /tmp/rank-debug-key.err /tmp/rank-random.out \
-    /tmp/rank-random.err /tmp/rank-random-sort-word.out /tmp/rank-random-repeat.out \
+    /tmp/rank-random.err /tmp/rank-random-sort-word.out \
+    /tmp/rank-random.content /tmp/rank-random.content.want \
+    /tmp/rank-random-short.out /tmp/rank-random-short.err \
     /tmp/rank-random-seed-a.out /tmp/rank-random-seed-a-repeat.out \
     /tmp/rank-random-seed-b.out \
     /tmp/rank-random-bad-source.out /tmp/rank-random-bad-source.err \
