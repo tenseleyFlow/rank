@@ -169,6 +169,9 @@ run_case dictionary-order 'a-b\nab\na b\naa\n' -d
 run_case ignore-nonprinting 'a\001b\nab\na\177b\naa\n' -i
 run_case key-ignore-case 'x b\ny A\nz a\nw B\n' -k2,2f
 run_case key-ignore-case-stable 'x b\ny A\nz a\nw B\n' -s -k2,2f
+run_case key-ignore-case-last-resort 'B x\na x\nb x\n' -k2,2f
+run_case key-dictionary-last-resort 'z a-b\ny ab\nx ab\n' -k2,2d
+run_case key-ignore-case-global-fold-tie 'B x\na x\nb x\n' -f -k2,2
 run_case key-dictionary-order 'x a-b\ny ab\nz a b\nw aa\n' -k2,2d
 run_case key-ignore-nonprinting 'x a\001b\ny ab\nz a\177b\nw aa\n' -k2,2i
 run_case numeric-basic '10\n2\n-1\n1.5\n' -n

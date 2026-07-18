@@ -31,8 +31,7 @@ rank_plan_from_options(const struct rank_options *options)
                 plan.reason = "whole-line filtered radix";
                 return plan;
             }
-            if (options->key_count == 1 && !options->reverse && !options->unique && !options->keys[0].reverse && options->keys[0].sort_mode == RANK_SORT_BYTE
-                && (options->stable || options->ignore_case || options->dictionary_order || options->ignore_nonprinting)) {
+            if (options->key_count == 1 && !options->reverse && !options->unique && !options->keys[0].reverse && options->keys[0].sort_mode == RANK_SORT_BYTE) {
                 plan.kind = RANK_PLAN_RADIX_TRANSFORMED;
                 plan.reason = options->stable ? "single stable filtered key radix" : "single filtered key radix";
                 return plan;

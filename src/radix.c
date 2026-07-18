@@ -56,6 +56,7 @@ static int compare_transformed_key_from_depth(const struct rank_lines *lines, co
 static size_t transformed_key_bucket(const struct rank_lines *lines, const struct rank_line *line, size_t depth);
 static bool transformed_key_same(const struct rank_lines *lines, const struct rank_line *a, const struct rank_line *b);
 static void sort_transformed_key_equal_groups(struct rank_lines *lines, struct rank_line *aux);
+static void sort_transformed_key_equal_groups_raw(struct rank_lines *lines, struct rank_line *aux);
 static bool transformed_line_same(const struct rank_lines *lines, const struct rank_line *a, const struct rank_line *b);
 static void sort_transformed_line_equal_groups_original(struct rank_lines *lines, struct rank_line *aux);
 static void compact_transformed_line_groups(struct rank_lines *lines);
@@ -184,10 +185,10 @@ rank_radix_sort_transformed_key(struct rank_lines *lines, const struct rank_opti
         if (key == NULL || !key->valid) {
             return false;
         }
-        if (!options->stable) {
+        if (!options->stable && lines->line_transforms != NULL) {
             const struct rank_transformed_span *line = rank_line_transform(lines, &lines->items[i]);
 
-            if (line == NULL || !line->valid) {
+            if (!line->valid) {
                 return false;
             }
         }
@@ -196,7 +197,11 @@ rank_radix_sort_transformed_key(struct rank_lines *lines, const struct rank_opti
     aux = rank_xmalloc(lines->len * sizeof(aux[0]));
     transformed_key_radix_range(lines, lines->items, aux, 0, lines->len, 0, stats);
     if (!options->stable) {
-        sort_transformed_key_equal_groups(lines, aux);
+        if (lines->line_transforms != NULL) {
+            sort_transformed_key_equal_groups(lines, aux);
+        } else {
+            sort_transformed_key_equal_groups_raw(lines, aux);
+        }
     }
     free(aux);
     return true;
@@ -1032,6 +1037,25 @@ sort_transformed_key_equal_groups(struct rank_lines *lines, struct rank_line *au
         }
         if (i - start > 1) {
             transformed_radix_range(lines, lines->items, aux, start, i, 0, NULL);
+        }
+        start = i;
+    }
+}
+
+/* Key-local-only text modifiers build no line transforms; GNU's last
+   resort there is the raw whole line. */
+static void
+sort_transformed_key_equal_groups_raw(struct rank_lines *lines, struct rank_line *aux)
+{
+    size_t start = 0;
+    size_t i;
+
+    for (i = 1; i <= lines->len; i++) {
+        if (i < lines->len && transformed_key_same(lines, &lines->items[start], &lines->items[i])) {
+            continue;
+        }
+        if (i - start > 1) {
+            line_radix_range(lines->items, aux, start, i, 0, NULL);
         }
         start = i;
     }
