@@ -25,7 +25,7 @@ rank_plan_from_options(const struct rank_options *options)
         return plan;
     }
     if (has_text_modifiers(options)) {
-        if (rank_locale_collation_identity() && options->sort_mode == RANK_SORT_BYTE && !(options->reverse && options->unique)) {
+        if (rank_locale_collation_identity() && options->sort_mode == RANK_SORT_BYTE) {
             if (options->key_count == 0) {
                 plan.kind = RANK_PLAN_RADIX_TRANSFORMED;
                 plan.reason = "whole-line filtered radix";

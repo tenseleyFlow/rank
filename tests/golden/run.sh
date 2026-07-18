@@ -156,6 +156,10 @@ run_case ignore-case 'b\nA\na\nB\n' -f
 run_case ignore-case-last-resort 'a\nA\nb\nB\n' -f
 run_case ignore-case-reverse 'a\nA\nb\nB\n' -fr
 run_case ignore-case-unique 'a\nA\nb\nB\n' -fu
+run_case ignore-case-reverse-unique 'a\nA\nb\nB\n' -fru
+run_case ignore-case-reverse-unique-upper-first 'A\na\nB\nb\n' -fru
+run_case dictionary-reverse-unique 'a-b\nab\na b\naa\n' -dru
+run_case nonprinting-reverse-unique 'a\001b\nab\na\177b\naa\n' -iru
 run_case dictionary-order 'a-b\nab\na b\naa\n' -d
 run_case ignore-nonprinting 'a\001b\nab\na\177b\naa\n' -i
 run_case key-ignore-case 'x b\ny A\nz a\nw B\n' -k2,2f

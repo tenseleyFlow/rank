@@ -67,8 +67,10 @@ RANK_DEBUG_PLAN=1 ./rank -fr /tmp/rank-file.in >/tmp/rank-plan-fold-r.out 2>/tmp
 grep 'rank: plan=radix-transformed reason=whole-line filtered radix' /tmp/rank-plan-fold-r.err >/dev/null
 RANK_DEBUG_PLAN=1 ./rank -fu /tmp/rank-file.in >/tmp/rank-plan-fold-u.out 2>/tmp/rank-plan-fold-u.err
 grep 'rank: plan=radix-transformed reason=whole-line filtered radix' /tmp/rank-plan-fold-u.err >/dev/null
-RANK_DEBUG_PLAN=1 ./rank -fru /tmp/rank-file.in >/tmp/rank-plan-fold-ru.out 2>/tmp/rank-plan-fold-ru.err
-grep 'rank: plan=scalar reason=text modifier' /tmp/rank-plan-fold-ru.err >/dev/null
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -fru /tmp/rank-file.in >/tmp/rank-plan-fold-ru.out 2>/tmp/rank-plan-fold-ru.err
+grep 'rank: plan=radix-transformed reason=whole-line filtered radix' /tmp/rank-plan-fold-ru.err >/dev/null
+printf 'b\na\n' > /tmp/rank-plan-fold-ru.want
+cmp /tmp/rank-plan-fold-ru.out /tmp/rank-plan-fold-ru.want
 
 RANK_DEBUG_PLAN=1 ./rank -k1,1 /tmp/rank-file.in >/tmp/rank-plan-key.out 2>/tmp/rank-plan-key.err
 grep 'rank: plan=radix-keys reason=single key byte radix' /tmp/rank-plan-key.err >/dev/null
@@ -262,7 +264,7 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-plan-fold.err /tmp/rank-plan-fold-r.out \
     /tmp/rank-plan-fold-r.err /tmp/rank-plan-fold-u.out \
     /tmp/rank-plan-fold-u.err /tmp/rank-plan-fold-ru.out \
-    /tmp/rank-plan-fold-ru.err /tmp/rank-plan-key.out \
+    /tmp/rank-plan-fold-ru.err /tmp/rank-plan-fold-ru.want /tmp/rank-plan-key.out \
     /tmp/rank-radix-stats.out /tmp/rank-radix-stats.err \
     /tmp/rank-plan-key.err /tmp/rank-plan-debug.out /tmp/rank-plan-debug.err \
     /tmp/rank-numeric.in /tmp/rank-numeric.out /tmp/rank-numeric.err \

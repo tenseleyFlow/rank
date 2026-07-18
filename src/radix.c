@@ -58,6 +58,7 @@ static bool transformed_key_same(const struct rank_lines *lines, const struct ra
 static void sort_transformed_key_equal_groups(struct rank_lines *lines, struct rank_line *aux);
 static bool transformed_line_same(const struct rank_lines *lines, const struct rank_line *a, const struct rank_line *b);
 static void sort_transformed_line_equal_groups_original(struct rank_lines *lines, struct rank_line *aux);
+static void compact_transformed_line_groups(struct rank_lines *lines);
 
 bool
 rank_radix_sort_lines(struct rank_lines *lines, struct rank_radix_stats *stats)
@@ -153,6 +154,8 @@ rank_radix_sort_transformed_lines(struct rank_lines *lines, const struct rank_op
     transformed_radix_range(lines, lines->items, aux, 0, lines->len, 0, stats);
     if (!options->stable && !options->unique) {
         sort_transformed_line_equal_groups_original(lines, aux);
+    } else if (options->unique && options->reverse) {
+        compact_transformed_line_groups(lines);
     }
     free(aux);
     return true;
@@ -1038,6 +1041,20 @@ static bool
 transformed_line_same(const struct rank_lines *lines, const struct rank_line *a, const struct rank_line *b)
 {
     return compare_transformed_from_depth(lines, a, b, 0) == 0;
+}
+
+static void
+compact_transformed_line_groups(struct rank_lines *lines)
+{
+    size_t out = 0;
+    size_t i;
+
+    for (i = 0; i < lines->len; i++) {
+        if (out == 0 || !transformed_line_same(lines, &lines->items[out - 1U], &lines->items[i])) {
+            lines->items[out++] = lines->items[i];
+        }
+    }
+    lines->len = out;
 }
 
 static void
