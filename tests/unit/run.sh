@@ -46,7 +46,7 @@ RANK_DEBUG_PLAN=1 ./rank /tmp/rank-file.in >/tmp/rank-plan.out 2>/tmp/rank-plan.
 grep 'rank: plan=radix-bytes reason=whole-line byte radix' /tmp/rank-plan.err >/dev/null
 cmp /tmp/rank-plan.out /tmp/rank-file.want
 
-if locale -a 2>/dev/null | grep '^C.UTF-8$' >/dev/null; then
+if locale -a 2>/dev/null | grep -Fx -e 'C.UTF-8' -e 'C.utf8' >/dev/null; then
     LC_ALL=C.UTF-8 RANK_DEBUG_PLAN=1 RANK_DEBUG_STATS=1 ./rank /tmp/rank-file.in >/tmp/rank-plan-cutf8.out 2>/tmp/rank-plan-cutf8.err
     grep 'rank: plan=radix-transformed reason=whole-line transformed radix' /tmp/rank-plan-cutf8.err >/dev/null
     grep 'rank: transformed radix ' /tmp/rank-plan-cutf8.err >/dev/null

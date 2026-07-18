@@ -89,7 +89,8 @@ run_merge_case() {
 }
 
 locale_available() {
-    locale -a 2>/dev/null | grep "^$1$" >/dev/null
+    alt=$(printf '%s' "$1" | sed 's/UTF-8/utf8/')
+    locale -a 2>/dev/null | grep -Fx -e "$1" -e "$alt" >/dev/null
 }
 
 run_locale_case() {
@@ -121,10 +122,13 @@ run_case radix-duplicates 'b\na\nb\na\n' -u
 if locale_available C.UTF-8; then
     run_locale_case C.UTF-8 cutf8-whole 'éclair\neagle\nÉclair\nábaco\n'
     run_locale_case C.UTF-8 cutf8-key 'x éclair\ny eagle\nz Éclair\nw ábaco\n' -k2,2
+    run_locale_case C.UTF-8 cutf8-nul 'b\000z\nb\000a\na\000z\nb\nab\n'
 fi
 if locale_available en_US.UTF-8; then
     run_locale_case en_US.UTF-8 en-us-whole 'éclair\neagle\nÉclair\nábaco\n'
     run_locale_case en_US.UTF-8 en-us-key 'x éclair\ny eagle\nz Éclair\nw ábaco\n' -k2,2
+    run_locale_case en_US.UTF-8 en-us-nul 'b\000z\nb\000a\na\000z\nb\nab\n'
+    run_locale_case en_US.UTF-8 en-us-nul-eclair 'éclair\000z\néclair\000a\neagle\000z\néclair\n'
 fi
 run_case missing-newline 'b\na'
 run_case empty ''
