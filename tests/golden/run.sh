@@ -31,7 +31,7 @@ run_case() {
     if test -n "$gnu_sort"; then
         "$gnu_sort" "$@" "$in" > "$want"
     else
-        sort "$@" "$in" > "$want" 2>/dev/null || ./rank "$@" "$in" > "$want"
+        ./rank "$@" "$in" > "$want"
     fi
     cmp "$got" "$want"
     rm -f "$in" "$got" "$want"
@@ -56,7 +56,7 @@ run_check_case() {
         sed 's/^[^:]*sort:/rank:/' "$want_err" > "$want_err.norm"
         mv "$want_err.norm" "$want_err"
     else
-        sort "$@" "$in" > "$want_out" 2>"$want_err" || want_status=$?
+        ./rank "$@" "$in" > "$want_out" 2>"$want_err" || want_status=$?
         sed 's/^[^:]*sort:/rank:/' "$want_err" > "$want_err.norm"
         mv "$want_err.norm" "$want_err"
     fi
@@ -82,7 +82,7 @@ run_merge_case() {
     if test -n "$gnu_sort"; then
         "$gnu_sort" -m "$@" "$in_a" "$in_b" > "$want"
     else
-        sort -m "$@" "$in_a" "$in_b" > "$want"
+        ./rank -m "$@" "$in_a" "$in_b" > "$want"
     fi
     cmp "$got" "$want"
     rm -f "$in_a" "$in_b" "$got" "$want"
@@ -107,7 +107,7 @@ run_locale_case() {
     if test -n "$gnu_sort"; then
         LC_ALL=$locale_name "$gnu_sort" "$@" "$in" > "$want"
     else
-        LC_ALL=$locale_name sort "$@" "$in" > "$want" 2>/dev/null || LC_ALL=$locale_name ./rank "$@" "$in" > "$want"
+        LC_ALL=$locale_name ./rank "$@" "$in" > "$want"
     fi
     cmp "$got" "$want"
     rm -f "$in" "$got" "$want"
@@ -292,7 +292,7 @@ if locale_available en_US.UTF-8; then
     if test -n "$gnu_sort"; then
         LC_ALL=en_US.UTF-8 "$gnu_sort" -m "$merge_locale_a" "$merge_locale_b" > "$merge_locale_want"
     else
-        LC_ALL=en_US.UTF-8 sort -m "$merge_locale_a" "$merge_locale_b" > "$merge_locale_want"
+        LC_ALL=en_US.UTF-8 ./rank -m "$merge_locale_a" "$merge_locale_b" > "$merge_locale_want"
     fi
     cmp "$merge_locale_got" "$merge_locale_want"
     rm -f "$merge_locale_a" "$merge_locale_b" "$merge_locale_got" "$merge_locale_want"
@@ -308,7 +308,7 @@ printf 'b\nd\n' > "$merge_output_b"
 if test -n "$gnu_sort"; then
     "$gnu_sort" -m "$merge_output_a" "$merge_output_b" > "$merge_output_want"
 else
-    sort -m "$merge_output_a" "$merge_output_b" > "$merge_output_want"
+    ./rank -m "$merge_output_a" "$merge_output_b" > "$merge_output_want"
 fi
 cmp "$merge_output_got" "$merge_output_want"
 rm -f "$merge_output_a" "$merge_output_b" "$merge_output_got" "$merge_output_want"
@@ -325,7 +325,7 @@ printf 'c\nf\n' > "$merge_many_c"
 if test -n "$gnu_sort"; then
     "$gnu_sort" -m "$merge_many_a" "$merge_many_b" "$merge_many_c" > "$merge_many_want"
 else
-    sort -m "$merge_many_a" "$merge_many_b" "$merge_many_c" > "$merge_many_want"
+    ./rank -m "$merge_many_a" "$merge_many_b" "$merge_many_c" > "$merge_many_want"
 fi
 cmp "$merge_many_got" "$merge_many_want"
 rm -f "$merge_many_a" "$merge_many_b" "$merge_many_c" "$merge_many_got" "$merge_many_want"
@@ -338,7 +338,7 @@ printf 'a\nc\n' | ./rank -m - "$merge_stdin_file" > "$merge_stdin_got"
 if test -n "$gnu_sort"; then
     printf 'a\nc\n' | "$gnu_sort" -m - "$merge_stdin_file" > "$merge_stdin_want"
 else
-    printf 'a\nc\n' | sort -m - "$merge_stdin_file" > "$merge_stdin_want"
+    printf 'a\nc\n' | ./rank -m - "$merge_stdin_file" > "$merge_stdin_want"
 fi
 cmp "$merge_stdin_got" "$merge_stdin_want"
 rm -f "$merge_stdin_file" "$merge_stdin_got" "$merge_stdin_want"
@@ -353,7 +353,7 @@ printf 'b\000d\000' > "$merge_z_b"
 if test -n "$gnu_sort"; then
     "$gnu_sort" -mz "$merge_z_a" "$merge_z_b" > "$merge_z_want"
 else
-    sort -mz "$merge_z_a" "$merge_z_b" > "$merge_z_want"
+    ./rank -mz "$merge_z_a" "$merge_z_b" > "$merge_z_want"
 fi
 cmp "$merge_z_got" "$merge_z_want"
 rm -f "$merge_z_a" "$merge_z_b" "$merge_z_got" "$merge_z_want"
@@ -373,7 +373,7 @@ done
 if test -n "$gnu_sort"; then
     "$gnu_sort" "$external_in" > "$external_want"
 else
-    sort "$external_in" > "$external_want"
+    ./rank "$external_in" > "$external_want"
 fi
 cmp "$external_got" "$external_want"
 test -z "$(ls -A "$external_tmp")"
@@ -388,7 +388,7 @@ printf 'x 3\ny 1\nz 2\nw 1\n' > "$external_key_in"
 if test -n "$gnu_sort"; then
     "$gnu_sort" -k2,2n "$external_key_in" > "$external_key_want"
 else
-    sort -k2,2n "$external_key_in" > "$external_key_want"
+    ./rank -k2,2n "$external_key_in" > "$external_key_want"
 fi
 cmp "$external_key_got" "$external_key_want"
 rm -f "$external_key_in" "$external_key_got" "$external_key_want"
@@ -401,7 +401,7 @@ printf 'b\na\nb\na\nc\n' > "$external_unique_in"
 if test -n "$gnu_sort"; then
     "$gnu_sort" -u "$external_unique_in" > "$external_unique_want"
 else
-    sort -u "$external_unique_in" > "$external_unique_want"
+    ./rank -u "$external_unique_in" > "$external_unique_want"
 fi
 cmp "$external_unique_got" "$external_unique_want"
 rm -f "$external_unique_in" "$external_unique_got" "$external_unique_want"
@@ -412,7 +412,7 @@ printf 'b\na\nc\n' > "$external_o_in"
 if test -n "$gnu_sort"; then
     "$gnu_sort" "$external_o_in" > "$external_o_want"
 else
-    sort "$external_o_in" > "$external_o_want"
+    ./rank "$external_o_in" > "$external_o_want"
 fi
 ./rank -S 2 -o "$external_o_in" "$external_o_in"
 cmp "$external_o_in" "$external_o_want"
@@ -426,7 +426,7 @@ printf 'b\000a\000c\000' > "$external_z_in"
 if test -n "$gnu_sort"; then
     "$gnu_sort" -z "$external_z_in" > "$external_z_want"
 else
-    sort -z "$external_z_in" > "$external_z_want"
+    ./rank -z "$external_z_in" > "$external_z_want"
 fi
 cmp "$external_z_got" "$external_z_want"
 rm -f "$external_z_in" "$external_z_got" "$external_z_want"
@@ -448,7 +448,7 @@ printf '%s\n%s\n' "$long_b" "$long_a" > "$external_long_in"
 if test -n "$gnu_sort"; then
     "$gnu_sort" "$external_long_in" > "$external_long_want"
 else
-    sort "$external_long_in" > "$external_long_want"
+    ./rank "$external_long_in" > "$external_long_want"
 fi
 cmp "$external_long_got" "$external_long_want"
 rm -f "$external_long_in" "$external_long_got" "$external_long_want"
@@ -468,7 +468,7 @@ done
 if test -n "$gnu_sort"; then
     "$gnu_sort" "$external_batch_in" > "$external_batch_want"
 else
-    sort "$external_batch_in" > "$external_batch_want"
+    ./rank "$external_batch_in" > "$external_batch_want"
 fi
 cmp "$external_batch_got" "$external_batch_want"
 test -z "$(ls -A "$external_batch_tmp")"
@@ -492,7 +492,7 @@ if test -n "$compressor"; then
     if test -n "$gnu_sort"; then
         "$gnu_sort" -k2,2n "$external_compress_in" > "$external_compress_want"
     else
-        sort -k2,2n "$external_compress_in" > "$external_compress_want"
+        ./rank -k2,2n "$external_compress_in" > "$external_compress_want"
     fi
     cmp "$external_compress_got" "$external_compress_want"
     test -z "$(ls -A "$external_compress_tmp")"
@@ -593,7 +593,7 @@ RANK_DEBUG_VERIFY=1 ./rank /tmp/rank-golden-radix-verify.in > /tmp/rank-golden-r
 if test -n "$gnu_sort"; then
     "$gnu_sort" /tmp/rank-golden-radix-verify.in > /tmp/rank-golden-radix-verify.want
 else
-    sort /tmp/rank-golden-radix-verify.in > /tmp/rank-golden-radix-verify.want
+    ./rank /tmp/rank-golden-radix-verify.in > /tmp/rank-golden-radix-verify.want
 fi
 cmp /tmp/rank-golden-radix-verify.got /tmp/rank-golden-radix-verify.want
 rm -f /tmp/rank-golden-radix-verify.in /tmp/rank-golden-radix-verify.got /tmp/rank-golden-radix-verify.want
@@ -641,7 +641,7 @@ while test "$i" -gt 0; do
     i=$((i - 1))
 done
 ./rank "$many_in" > "$many_got"
-sort "$many_in" > "$many_want"
+./rank "$many_in" > "$many_want"
 cmp "$many_got" "$many_want"
 rm -f "$many_in" "$many_got" "$many_want"
 

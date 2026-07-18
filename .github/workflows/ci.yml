@@ -16,6 +16,8 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
+      - run: brew install coreutils
+        if: runner.os == 'macOS'
       - run: ./configure
       - run: make check
       - run: make sanitize
@@ -25,7 +27,7 @@ jobs:
     container: alpine:latest
     steps:
       - uses: actions/checkout@v4
-      - run: apk add --no-cache build-base bash grep sed
+      - run: apk add --no-cache build-base bash grep sed coreutils
       - run: ./configure
       - run: make check
 
@@ -36,7 +38,7 @@ jobs:
       - uses: vmactions/freebsd-vm@v1
         with:
           usesh: true
-          prepare: pkg install -y gmake
+          prepare: pkg install -y gmake coreutils
           run: |
             ./configure
             gmake check
