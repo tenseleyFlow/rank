@@ -1,6 +1,7 @@
 #include "line.h"
 
 #include "rank_locale.h"
+#include "sys/scan.h"
 #include "util.h"
 
 #include <errno.h>
@@ -53,7 +54,6 @@ static size_t explicit_field_start(const struct rank_line *line, unsigned char s
 static size_t explicit_field_end(const struct rank_line *line, unsigned char sep, size_t field_start);
 static size_t blank_field_start(const struct rank_line *line, size_t field, bool ignore_blanks);
 static size_t blank_field_end(const struct rank_line *line, size_t field_start);
-static bool sort_blank(unsigned char byte);
 
 void
 rank_lines_init(struct rank_lines *lines)
@@ -441,9 +441,14 @@ append_filtered_span(struct rank_lines *lines, const unsigned char *text, size_t
         return false;
     }
     off = lines->transform_data_len;
-    for (i = 0; i < len; i++) {
-        if (filtered_keep(text[i], dictionary_order, ignore_nonprinting)) {
-            lines->transform_data[lines->transform_data_len++] = filtered_fold(text[i], ignore_case);
+    if (ignore_case && !dictionary_order && !ignore_nonprinting) {
+        rank_fold_upper(lines->transform_data + off, text, len);
+        lines->transform_data_len += len;
+    } else {
+        for (i = 0; i < len; i++) {
+            if (filtered_keep(text[i], dictionary_order, ignore_nonprinting)) {
+                lines->transform_data[lines->transform_data_len++] = filtered_fold(text[i], ignore_case);
+            }
         }
     }
     out->len = lines->transform_data_len - off;
@@ -1038,7 +1043,7 @@ static void
 fill_explicit_field_cache(const struct rank_line *line, unsigned char sep, size_t max_field, size_t *field_starts, size_t *field_ends)
 {
     size_t field;
-    size_t i;
+    size_t i = 0;
 
     for (field = 0; field <= max_field; field++) {
         field_starts[field] = line->len;
@@ -1050,14 +1055,20 @@ fill_explicit_field_cache(const struct rank_line *line, unsigned char sep, size_
 
     field = 1;
     field_starts[field] = 0;
-    for (i = 0; i < line->len && field <= max_field; i++) {
-        if (line->text[i] == sep) {
-            field_ends[field] = i;
-            field++;
-            if (field <= max_field) {
-                field_starts[field] = i + 1U;
-            }
+    while (i < line->len && field <= max_field) {
+        const unsigned char *hit = memchr(line->text + i, sep, line->len - i);
+        size_t pos;
+
+        if (hit == NULL) {
+            break;
         }
+        pos = (size_t)(hit - line->text);
+        field_ends[field] = pos;
+        field++;
+        if (field <= max_field) {
+            field_starts[field] = pos + 1U;
+        }
+        i = pos + 1U;
     }
     if (field <= max_field) {
         field_ends[field] = line->len;
@@ -1080,18 +1091,14 @@ fill_blank_field_cache(const struct rank_line *line, size_t max_field, size_t *b
     while (i < line->len && field < max_field) {
         size_t blanks = i;
 
-        while (i < line->len && sort_blank(line->text[i])) {
-            i++;
-        }
+        i += rank_scan_nonblank(line->text + i, line->len - i);
         if (i == line->len) {
             return;
         }
         field++;
         blank_starts[field] = blanks;
         text_starts[field] = i;
-        while (i < line->len && !sort_blank(line->text[i])) {
-            i++;
-        }
+        i += rank_scan_blank(line->text + i, line->len - i);
         field_ends[field] = i;
     }
 }
@@ -1204,17 +1211,21 @@ static size_t
 explicit_field_start(const struct rank_line *line, unsigned char sep, size_t field)
 {
     size_t current = 1;
-    size_t i;
+    size_t i = 0;
 
     if (field == 1) {
         return 0;
     }
-    for (i = 0; i < line->len; i++) {
-        if (line->text[i] == sep) {
-            current++;
-            if (current == field) {
-                return i + 1U;
-            }
+    while (i < line->len) {
+        const unsigned char *hit = memchr(line->text + i, sep, line->len - i);
+
+        if (hit == NULL) {
+            return line->len;
+        }
+        i = (size_t)(hit - line->text) + 1U;
+        current++;
+        if (current == field) {
+            return i;
         }
     }
     return line->len;
@@ -1223,14 +1234,13 @@ explicit_field_start(const struct rank_line *line, unsigned char sep, size_t fie
 static size_t
 explicit_field_end(const struct rank_line *line, unsigned char sep, size_t field_start)
 {
-    size_t i;
+    const unsigned char *hit;
 
-    for (i = field_start; i < line->len; i++) {
-        if (line->text[i] == sep) {
-            return i;
-        }
+    if (field_start >= line->len) {
+        return line->len;
     }
-    return line->len;
+    hit = memchr(line->text + field_start, sep, line->len - field_start);
+    return hit == NULL ? line->len : (size_t)(hit - line->text);
 }
 
 static size_t
@@ -1242,9 +1252,7 @@ blank_field_start(const struct rank_line *line, size_t field, bool ignore_blanks
     while (i < line->len) {
         size_t blanks = i;
 
-        while (i < line->len && sort_blank(line->text[i])) {
-            i++;
-        }
+        i += rank_scan_nonblank(line->text + i, line->len - i);
         if (i == line->len) {
             return line->len;
         }
@@ -1252,9 +1260,7 @@ blank_field_start(const struct rank_line *line, size_t field, bool ignore_blanks
         if (current == field) {
             return ignore_blanks ? i : blanks;
         }
-        while (i < line->len && !sort_blank(line->text[i])) {
-            i++;
-        }
+        i += rank_scan_blank(line->text + i, line->len - i);
     }
     return line->len;
 }
@@ -1264,17 +1270,7 @@ blank_field_end(const struct rank_line *line, size_t field_start)
 {
     size_t i = field_start;
 
-    while (i < line->len && sort_blank(line->text[i])) {
-        i++;
-    }
-    while (i < line->len && !sort_blank(line->text[i])) {
-        i++;
-    }
+    i += rank_scan_nonblank(line->text + i, line->len - i);
+    i += rank_scan_blank(line->text + i, line->len - i);
     return i;
-}
-
-static bool
-sort_blank(unsigned char byte)
-{
-    return byte == (unsigned char)' ' || byte == (unsigned char)'\t';
 }

@@ -5,6 +5,7 @@
 #include "numeric.h"
 #include "output.h"
 #include "rank_locale.h"
+#include "sys/scan.h"
 #include "util.h"
 
 #include <errno.h>
@@ -74,7 +75,6 @@ static size_t merge_blank_field_start(const struct rank_line *line, size_t field
 static size_t merge_blank_field_end(const struct rank_line *line, size_t field_start);
 static size_t merge_explicit_field_start(const struct rank_line *line, unsigned char sep, size_t field);
 static size_t merge_explicit_field_end(const struct rank_line *line, unsigned char sep, size_t field_start);
-static bool merge_sort_blank(unsigned char byte);
 static size_t merge_heap_build(size_t *heap, const struct merge_run *runs, size_t run_count);
 static void merge_heap_sift_down(size_t *heap, size_t heap_len, size_t root, const struct rank_lines *lines, struct rank_cmp_context *cmp, const struct merge_run *runs);
 static bool merge_run_less(const struct rank_lines *lines, struct rank_cmp_context *cmp, const struct merge_run *runs, size_t a, size_t b);
@@ -360,9 +360,7 @@ merge_blank_field_start(const struct rank_line *line, size_t field, bool ignore_
     while (i < line->len) {
         size_t blanks = i;
 
-        while (i < line->len && merge_sort_blank(line->text[i])) {
-            i++;
-        }
+        i += rank_scan_nonblank(line->text + i, line->len - i);
         if (i == line->len) {
             return line->len;
         }
@@ -370,9 +368,7 @@ merge_blank_field_start(const struct rank_line *line, size_t field, bool ignore_
         if (current == field) {
             return ignore_blanks ? i : blanks;
         }
-        while (i < line->len && !merge_sort_blank(line->text[i])) {
-            i++;
-        }
+        i += rank_scan_blank(line->text + i, line->len - i);
     }
     return line->len;
 }
@@ -382,12 +378,8 @@ merge_blank_field_end(const struct rank_line *line, size_t field_start)
 {
     size_t i = field_start;
 
-    while (i < line->len && merge_sort_blank(line->text[i])) {
-        i++;
-    }
-    while (i < line->len && !merge_sort_blank(line->text[i])) {
-        i++;
-    }
+    i += rank_scan_nonblank(line->text + i, line->len - i);
+    i += rank_scan_blank(line->text + i, line->len - i);
     return i;
 }
 
@@ -422,12 +414,6 @@ merge_explicit_field_end(const struct rank_line *line, unsigned char sep, size_t
         }
     }
     return line->len;
-}
-
-static bool
-merge_sort_blank(unsigned char byte)
-{
-    return byte == (unsigned char)' ' || byte == (unsigned char)'\t';
 }
 
 static size_t

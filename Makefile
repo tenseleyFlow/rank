@@ -18,7 +18,8 @@ SRC = \
 	src/output.c \
 	src/util.c \
 	src/sys/file.c \
-	src/sys/cpu.c
+	src/sys/cpu.c \
+	src/sys/scan.c
 
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d)

@@ -3,6 +3,10 @@ set -eu
 
 export LC_ALL=C
 
+${CC:-cc} -std=c11 -O2 -Wall -Wextra -Werror -Wconversion -Isrc -o /tmp/rank-scan-fuzz tests/unit/scan-fuzz.c src/sys/scan.c
+/tmp/rank-scan-fuzz
+rm -f /tmp/rank-scan-fuzz
+
 ./rank --version >/tmp/rank-version.out
 grep 'rank 0.0.0-sprint01' /tmp/rank-version.out >/dev/null
 
