@@ -12,6 +12,7 @@ static unsigned char span_modifier_fold(unsigned char byte, bool ignore_case);
 static int compare_transformed_spans(const struct rank_transformed_span *a, const struct rank_transformed_span *b);
 static int compare_random(const struct rank_md5_digest *a, const struct rank_md5_digest *b);
 static int compare_keys(struct rank_cmp_context *ctx, const struct rank_line *a, const struct rank_line *b);
+static int compare_lines_last_resort(struct rank_cmp_context *ctx, const struct rank_line *a, const struct rank_line *b);
 
 void
 rank_cmp_context_init(struct rank_cmp_context *ctx, const struct rank_options *options, const struct rank_lines *lines)
@@ -78,7 +79,7 @@ rank_compare_lines(struct rank_cmp_context *ctx, const struct rank_line *a, cons
             result = compare_spans(ctx, a->text, a->len, b->text, b->len, RANK_SORT_BYTE);
         }
     } else if (result == 0 && !(ctx->options->stable || ctx->options->unique)) {
-        result = rank_compare_lines_ascending(ctx, a, b);
+        result = compare_lines_last_resort(ctx, a, b);
     }
 
     if (ctx->options->reverse) {
@@ -94,6 +95,23 @@ rank_compare_unique(struct rank_cmp_context *ctx, const struct rank_line *a, con
         return compare_keys(ctx, a, b);
     }
     return rank_compare_lines_ascending(ctx, a, b);
+}
+
+/* GNU's keyed last resort is the plain whole-line comparison: raw bytes
+   in identity collation, collation order otherwise. Global ordering
+   modes and text modifiers do not apply to it. */
+static int
+compare_lines_last_resort(struct rank_cmp_context *ctx, const struct rank_line *a, const struct rank_line *b)
+{
+    const struct rank_transformed_span *a_transform = rank_line_transform(ctx->lines, a);
+    const struct rank_transformed_span *b_transform = rank_line_transform(ctx->lines, b);
+
+    if (a_transform != NULL && b_transform != NULL && a_transform->valid && b_transform->valid) {
+        ctx->calls++;
+        ctx->bytes += a_transform->len < b_transform->len ? a_transform->len : b_transform->len;
+        return compare_transformed_spans(a_transform, b_transform);
+    }
+    return compare_spans(ctx, a->text, a->len, b->text, b->len, RANK_SORT_BYTE);
 }
 
 static int

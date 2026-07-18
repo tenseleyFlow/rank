@@ -190,6 +190,13 @@ run_case numeric-trailing-dot '2.\n1.\n1.5\n' -n
 run_case numeric-equal-last-resort '01\n1\n1.0\n' -n
 run_case numeric-key 'a 10\nb 2\nc -1\n' -k2,2n
 run_case numeric-global-key 'a 10\nb 2\nc -1\n' -n -k2,2
+run_case numeric-keyed-last-resort 'b 1\na 1\nc 2\n' -n -k2,2
+run_case numeric-keyed-last-resort-mod 'b 1\na 1\nc 2\n' -k2,2n
+run_case numeric-keyed-last-resort-reverse 'b 1\na 1\nc 2\n' -n -k2,2 -r
+run_case month-keyed-last-resort 'b Jan\na Jan\nc Feb\n' -M -k2,2
+run_case version-keyed-last-resort 'b 1.0\na 1.0\nc 1.2\n' -V -k2,2
+run_case human-keyed-last-resort 'b 1K\na 1K\nc 2K\n' -h -k2,2
+run_case general-keyed-last-resort 'b 1e1\na 1e1\nc 2e1\n' -g -k2,2
 run_case numeric-reverse '10\n2\n-1\n1.5\n' -n -r
 run_case numeric-unique 'a 1\nb 1.0\nc 2\n' -u -k2,2n
 run_case general-numeric-basic '1e2\n10\n-inf\ninf\nnan\nx\n' -g

@@ -225,6 +225,10 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
         return false;
     }
 
+    /* Keyed last resort is the raw whole line, so identity collation
+       needs no line transforms; strxfrm copies would be identity. */
+    want_line_transforms = options->sort_mode == RANK_SORT_BYTE && !locale_identity;
+
     lines->key_span_count = lines->len * options->key_count;
     lines->key_spans = rank_xrealloc(lines->key_spans, lines->key_span_count * sizeof(lines->key_spans[0]));
     for (k = 0; k < options->key_count; k++) {
