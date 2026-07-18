@@ -513,19 +513,23 @@ test "$external_missing_status" -ne 0
 test -s "$external_missing_err"
 rm -f "$external_missing_in" "$external_missing_err" /tmp/rank-external-missing.out.$$
 
-external_nowrite_tmp=${TMPDIR:-/tmp}/rank-external-nowrite-tmp.$$
-external_nowrite_in=${TMPDIR:-/tmp}/rank-external-nowrite-in.$$
-external_nowrite_err=${TMPDIR:-/tmp}/rank-external-nowrite.err.$$
-external_nowrite_status=0
-mkdir "$external_nowrite_tmp"
-chmod 500 "$external_nowrite_tmp"
-printf 'b\na\n' > "$external_nowrite_in"
-./rank -S 2 -T "$external_nowrite_tmp" "$external_nowrite_in" >/tmp/rank-external-nowrite.out.$$ 2>"$external_nowrite_err" || external_nowrite_status=$?
-chmod 700 "$external_nowrite_tmp"
-test "$external_nowrite_status" -ne 0
-test -s "$external_nowrite_err"
-rm -f "$external_nowrite_in" "$external_nowrite_err" /tmp/rank-external-nowrite.out.$$
-rmdir "$external_nowrite_tmp"
+# root ignores directory permissions, so the unwritable-dir case only
+# means something for unprivileged runs (CI containers and VMs are root).
+if test "$(id -u)" -ne 0; then
+    external_nowrite_tmp=${TMPDIR:-/tmp}/rank-external-nowrite-tmp.$$
+    external_nowrite_in=${TMPDIR:-/tmp}/rank-external-nowrite-in.$$
+    external_nowrite_err=${TMPDIR:-/tmp}/rank-external-nowrite.err.$$
+    external_nowrite_status=0
+    mkdir "$external_nowrite_tmp"
+    chmod 500 "$external_nowrite_tmp"
+    printf 'b\na\n' > "$external_nowrite_in"
+    ./rank -S 2 -T "$external_nowrite_tmp" "$external_nowrite_in" >/tmp/rank-external-nowrite.out.$$ 2>"$external_nowrite_err" || external_nowrite_status=$?
+    chmod 700 "$external_nowrite_tmp"
+    test "$external_nowrite_status" -ne 0
+    test -s "$external_nowrite_err"
+    rm -f "$external_nowrite_in" "$external_nowrite_err" /tmp/rank-external-nowrite.out.$$
+    rmdir "$external_nowrite_tmp"
+fi
 
 external_badcompress_in=${TMPDIR:-/tmp}/rank-external-badcompress-in.$$
 external_badcompress_err=${TMPDIR:-/tmp}/rank-external-badcompress.err.$$
@@ -606,7 +610,7 @@ printf 'z 2\na 1\n' > /tmp/rank-golden-debug.in
 ./rank --debug -b -k2,2 /tmp/rank-golden-debug.in > /tmp/rank-golden-debug.got 2>/tmp/rank-golden-debug.err
 if test -n "$gnu_sort"; then
     "$gnu_sort" --debug -b -k2,2 /tmp/rank-golden-debug.in > /tmp/rank-golden-debug.want 2>/tmp/rank-golden-debug-sort.err
-    sed 's/^sort:/rank:/' /tmp/rank-golden-debug-sort.err > /tmp/rank-golden-debug.err.want
+    sed 's/^[^:]*sort:/rank:/' /tmp/rank-golden-debug-sort.err > /tmp/rank-golden-debug.err.want
     cmp /tmp/rank-golden-debug.err /tmp/rank-golden-debug.err.want
 else
     printf 'a 1\n  _\n___\nz 2\n  _\n___\n' > /tmp/rank-golden-debug.want
