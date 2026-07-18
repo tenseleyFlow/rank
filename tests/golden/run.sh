@@ -2,6 +2,10 @@
 set -eu
 
 export LC_ALL=C
+# GNU sort only honors obsolete +POS -POS keys when POSIX 1992 is
+# requested; strict-POSIX coreutils builds (musl, brew, FreeBSD pkg)
+# otherwise treat +1 as a filename. Pin it so the oracle is uniform.
+export _POSIX2_VERSION=199209
 
 gnu_sort=$(sh scripts/find-gnu-sort.sh || true)
 if test -n "$gnu_sort"; then
