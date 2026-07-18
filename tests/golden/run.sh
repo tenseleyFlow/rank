@@ -145,6 +145,13 @@ run_case key-unique-multi 'x a 1\ny a 1\nz a 2\nw b 1\n' -u -k2,2 -k3,3
 run_case key-multi 'b 2\na 2\nc 1\n' -k2,2 -k1,1
 run_case key-reverse 'a 1\nb 2\n' -k2,2r
 run_case key-global-reverse 'a 1\nb 2\n' -r -k2,2
+run_case key-last-resort 'b 1\na 1\nc 2\n' -k2,2
+run_case key-last-resort-reverse 'b 1\na 1\nc 2\n' -r -k2,2
+run_case key-mixed-reverse-last-resort 'b 1\na 1\nc 2\n' -r -k2,2r
+run_case key-multi-nonstable 'b 2 1\na 2 1\nc 1 2\n' -k2,2 -k3,3
+run_case key-multi-last-resort 'b 1 x\na 1 x\nc 2 y\n' -k2,2 -k3,3
+run_case key-multi-global-reverse 'b 1 x\na 1 x\nc 2 y\n' -r -k2,2 -k3,3
+run_case key-multi-mixed-reverse 'b 1 x\na 1 x\nc 2 y\n' -r -k2,2 -k3,3r
 run_case ignore-case 'b\nA\na\nB\n' -f
 run_case ignore-case-last-resort 'a\nA\nb\nB\n' -f
 run_case ignore-case-reverse 'a\nA\nb\nB\n' -fr

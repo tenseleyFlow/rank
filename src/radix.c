@@ -39,7 +39,7 @@ static size_t skip_key_common_prefix_lcp(const struct rank_lines *lines, struct 
 static bool maybe_use_key_monotonic(struct rank_lines *lines, const struct rank_options *options);
 static bool maybe_use_key_range_monotonic(struct rank_lines *lines, const struct rank_options *options, struct rank_line *items, size_t lo, size_t hi, size_t key_id);
 static void reverse_line_range(struct rank_line *items, size_t lo, size_t hi);
-static void sort_key_equal_groups(struct rank_lines *lines, const struct rank_options *options, struct rank_line *aux);
+static void sort_line_last_resort_groups(struct rank_lines *lines, const struct rank_options *options, struct rank_line *aux, size_t lo, size_t hi, size_t key_id);
 static void sort_next_key_groups(struct rank_lines *lines, const struct rank_options *options, struct rank_line *aux, size_t lo, size_t hi, size_t key_id);
 static bool same_key(const struct rank_lines *lines, const struct rank_options *options, const struct rank_line *a, const struct rank_line *b, size_t key_id);
 static void line_radix_range(struct rank_line *items, struct rank_line *aux, size_t lo, size_t hi, size_t depth, struct rank_radix_stats *stats);
@@ -118,7 +118,7 @@ rank_radix_sort_key(struct rank_lines *lines, const struct rank_options *options
     if (options->key_count > 1) {
         sort_next_key_groups(lines, options, aux, 0, lines->len, 0);
     } else if (!options->stable && !options->unique) {
-        sort_key_equal_groups(lines, options, aux);
+        sort_line_last_resort_groups(lines, options, aux, 0, lines->len, 0);
     }
     free(aux);
     return true;
@@ -641,18 +641,20 @@ reverse_line_range(struct rank_line *items, size_t lo, size_t hi)
 }
 
 static void
-sort_key_equal_groups(struct rank_lines *lines, const struct rank_options *options, struct rank_line *aux)
+sort_line_last_resort_groups(struct rank_lines *lines, const struct rank_options *options, struct rank_line *aux, size_t lo, size_t hi, size_t key_id)
 {
-    size_t start = 0;
+    size_t start = lo;
     size_t i;
 
-    (void)options;
-    for (i = 1; i <= lines->len; i++) {
-        if (i < lines->len && same_key(lines, options, &lines->items[start], &lines->items[i], 0)) {
+    for (i = lo + 1U; i <= hi; i++) {
+        if (i < hi && same_key(lines, options, &lines->items[start], &lines->items[i], key_id)) {
             continue;
         }
         if (i - start > 1) {
             line_radix_range(lines->items, aux, start, i, 0, NULL);
+            if (options->reverse) {
+                reverse_line_range(lines->items, start, i);
+            }
         }
         start = i;
     }
@@ -675,6 +677,8 @@ sort_next_key_groups(struct rank_lines *lines, const struct rank_options *option
             }
             if (next_key + 1U < options->key_count) {
                 sort_next_key_groups(lines, options, aux, start, i, next_key);
+            } else if (!options->stable && !options->unique) {
+                sort_line_last_resort_groups(lines, options, aux, start, i, next_key);
             }
         }
         start = i;

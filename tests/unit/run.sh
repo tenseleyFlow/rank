@@ -114,8 +114,10 @@ printf 'c,1\na,2\nb,2\n' > /tmp/rank-key-radix-multi.want
 cmp /tmp/rank-key-radix-multi.out /tmp/rank-key-radix-multi.want
 grep 'rank: plan=radix-keys reason=multi-key byte radix' /tmp/rank-key-radix-multi.err >/dev/null
 
-RANK_DEBUG_PLAN=1 ./rank -t, -k2,2 -k1,1 /tmp/rank-key-radix-multi.in >/tmp/rank-key-radix-multi-fallback.out 2>/tmp/rank-key-radix-multi-fallback.err
-grep 'rank: plan=scalar reason=keyed sort' /tmp/rank-key-radix-multi-fallback.err >/dev/null
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -t, -k2,2 -k1,1 /tmp/rank-key-radix-multi.in >/tmp/rank-key-radix-multi-fallback.out 2>/tmp/rank-key-radix-multi-fallback.err
+printf 'c,1\na,2\nb,2\n' > /tmp/rank-key-radix-multi-fallback.want
+cmp /tmp/rank-key-radix-multi-fallback.out /tmp/rank-key-radix-multi-fallback.want
+grep 'rank: plan=radix-keys reason=multi-key byte radix' /tmp/rank-key-radix-multi-fallback.err >/dev/null
 
 printf 'a,x,2\nb,x,1\na,x,1\nb,x,2\n' > /tmp/rank-key-radix-nkey.in
 RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -s -t, -k1,1 -k2,2 -k3,3 /tmp/rank-key-radix-nkey.in >/tmp/rank-key-radix-nkey.out 2>/tmp/rank-key-radix-nkey.err
@@ -138,8 +140,10 @@ printf 'a,x,2\na,x,1\nb,x,2\nb,x,1\n' > /tmp/rank-key-radix-mixed-rev.want
 cmp /tmp/rank-key-radix-mixed-rev.out /tmp/rank-key-radix-mixed-rev.want
 grep 'rank: plan=radix-keys reason=multi-key byte radix' /tmp/rank-key-radix-mixed-rev.err >/dev/null
 
-RANK_DEBUG_PLAN=1 ./rank -r -t, -k2,2 /tmp/rank-key-radix.in >/tmp/rank-key-radix-global-rev-fallback.out 2>/tmp/rank-key-radix-global-rev-fallback.err
-grep 'rank: plan=scalar reason=keyed sort' /tmp/rank-key-radix-global-rev-fallback.err >/dev/null
+RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -r -t, -k2,2 /tmp/rank-key-radix.in >/tmp/rank-key-radix-global-rev-fallback.out 2>/tmp/rank-key-radix-global-rev-fallback.err
+printf 'x,b\nz,a\ny,a\n' > /tmp/rank-key-radix-global-rev-fallback.want
+cmp /tmp/rank-key-radix-global-rev-fallback.out /tmp/rank-key-radix-global-rev-fallback.want
+grep 'rank: plan=radix-keys reason=single key byte radix' /tmp/rank-key-radix-global-rev-fallback.err >/dev/null
 
 printf 'z,a\na,a\nb,b\n' > /tmp/rank-key-radix-unique.in
 RANK_DEBUG_PLAN=1 RANK_DEBUG_VERIFY=1 ./rank -u -t, -k2,2 /tmp/rank-key-radix-unique.in >/tmp/rank-key-radix-unique.out 2>/tmp/rank-key-radix-unique.err
@@ -278,6 +282,7 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-key-radix-multi.in /tmp/rank-key-radix-multi.out \
     /tmp/rank-key-radix-multi.err /tmp/rank-key-radix-multi.want \
     /tmp/rank-key-radix-multi-fallback.out /tmp/rank-key-radix-multi-fallback.err \
+    /tmp/rank-key-radix-multi-fallback.want /tmp/rank-key-radix-global-rev-fallback.want \
     /tmp/rank-key-radix-nkey.in /tmp/rank-key-radix-nkey.out \
     /tmp/rank-key-radix-nkey.err /tmp/rank-key-radix-nkey.want \
     /tmp/rank-key-radix-rev.out /tmp/rank-key-radix-rev.err \

@@ -60,12 +60,8 @@ rank_plan_from_options(const struct rank_options *options)
         return plan;
     }
     if (options->key_count > 0) {
-        if (options->unique || options->stable || (!options->reverse && options->key_count == 1)) {
-            plan.kind = RANK_PLAN_RADIX_KEYS;
-            plan.reason = options->unique ? "unique key byte radix" : (options->key_count == 1 ? (options->stable ? "single stable key byte radix" : "single key byte radix") : "multi-key byte radix");
-            return plan;
-        }
-        plan.reason = "keyed sort";
+        plan.kind = RANK_PLAN_RADIX_KEYS;
+        plan.reason = options->unique ? "unique key byte radix" : (options->key_count == 1 ? (options->stable ? "single stable key byte radix" : "single key byte radix") : "multi-key byte radix");
         return plan;
     }
     plan.kind = RANK_PLAN_RADIX_BYTES;
