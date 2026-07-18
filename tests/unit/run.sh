@@ -46,6 +46,11 @@ grep 'rank: comparator calls=' /tmp/rank-stats.err >/dev/null
 RANK_DEBUG_VERIFY=1 ./rank /tmp/rank-file.in >/tmp/rank-verify.out
 cmp /tmp/rank-verify.out /tmp/rank-file.want
 
+RANK_FORCE_READ=1 ./rank /tmp/rank-file.in >/tmp/rank-forceread.out
+cmp /tmp/rank-forceread.out /tmp/rank-file.want
+RANK_FORCE_READ=1 ./rank -s -k1,1 /tmp/rank-file.in >/tmp/rank-forceread-key.out
+cmp /tmp/rank-forceread-key.out /tmp/rank-file.want
+
 RANK_DEBUG_PLAN=1 ./rank /tmp/rank-file.in >/tmp/rank-plan.out 2>/tmp/rank-plan.err
 grep 'rank: plan=radix-bytes reason=whole-line byte radix' /tmp/rank-plan.err >/dev/null
 cmp /tmp/rank-plan.out /tmp/rank-file.want
@@ -275,6 +280,7 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-zero.out /tmp/rank-zero.want /tmp/rank-file.in /tmp/rank-file.out \
     /tmp/rank-file.want /tmp/rank-stats.out /tmp/rank-stats.err /tmp/rank-missing.out \
     /tmp/rank-missing.err /tmp/rank-verify.out /tmp/rank-after-operand.out \
+    /tmp/rank-forceread.out /tmp/rank-forceread-key.out \
     /tmp/rank-plan.out /tmp/rank-plan.err /tmp/rank-plan-cutf8.out \
     /tmp/rank-plan-cutf8.err /tmp/rank-plan-cutf8-key.out \
     /tmp/rank-plan-cutf8-key.err /tmp/rank-plan-fold.out \

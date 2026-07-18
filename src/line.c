@@ -122,6 +122,7 @@ rank_lines_read_all(struct rank_lines *lines, const struct rank_options *options
     if (options->operand_count == 0) {
         ok = read_stream(lines, options, STDIN_FILENO, "-");
     } else if (options->output_file == NULL && options->operand_count == 1 && strcmp(options->operands[0], "-") != 0
+        && getenv("RANK_FORCE_READ") == NULL
         && read_single_regular_mmap(lines, options, options->operands[0])) {
         ok = true;
     } else {
