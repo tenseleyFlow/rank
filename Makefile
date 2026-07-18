@@ -22,7 +22,7 @@ SRC = \
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d)
 
-CPPFLAGS += -I. -Isrc
+CPPFLAGS += -I. -Isrc -D_DEFAULT_SOURCE
 CFLAGS ?= -O2
 CFLAGS += -std=c11 -Wall -Wextra -Werror -Wpedantic -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wconversion
 LDFLAGS ?=
