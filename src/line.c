@@ -383,6 +383,37 @@ rank_line_key_span(const struct rank_lines *lines, const struct rank_line *line,
     return &lines->key_spans[line->key_index + key_id];
 }
 
+/* Span of key 0 for callers that validated a simple single-field key
+   (start field == end field, no character offsets): streaming check
+   and merge heads, which have no prepared rank_lines. */
+struct rank_key_span
+rank_simple_key_span(const unsigned char *text, size_t len, const struct rank_options *options)
+{
+    const struct rank_keydef *key = &options->keys[0];
+    struct rank_line line;
+    struct rank_key_span span;
+    size_t start;
+    size_t end;
+
+    line.text = text;
+    line.len = len;
+    if (options->has_field_separator) {
+        start = explicit_field_start(&line, options->field_separator, key->start_field);
+        end = explicit_field_end(&line, options->field_separator, start);
+    } else {
+        bool ignore_blanks = options->ignore_leading_blanks || key->ignore_start_blanks;
+
+        start = blank_field_start(&line, key->start_field, ignore_blanks);
+        end = blank_field_end(&line, start);
+    }
+    if (end < start) {
+        end = start;
+    }
+    span.ptr = text + start;
+    span.len = end - start;
+    return span;
+}
+
 const struct rank_transformed_span *
 rank_line_transform(const struct rank_lines *lines, const struct rank_line *line)
 {

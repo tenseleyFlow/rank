@@ -70,11 +70,6 @@ static bool merge_direct_output(struct rank_lines *lines, const struct rank_opti
 static enum merge_fast_mode merge_fast_mode(const struct rank_options *options);
 static bool merge_head_cache_init(struct merge_head_cache **caches_out, const struct rank_lines *lines, const struct rank_options *options, const struct merge_run *runs, size_t run_count, enum merge_fast_mode mode);
 static void merge_head_cache_update(struct merge_head_cache *caches, const struct rank_lines *lines, const struct rank_options *options, const struct merge_run *runs, size_t run_id, enum merge_fast_mode mode);
-static struct rank_key_span merge_extract_simple_key(const struct rank_line *line, const struct rank_options *options);
-static size_t merge_blank_field_start(const struct rank_line *line, size_t field, bool ignore_blanks);
-static size_t merge_blank_field_end(const struct rank_line *line, size_t field_start);
-static size_t merge_explicit_field_start(const struct rank_line *line, unsigned char sep, size_t field);
-static size_t merge_explicit_field_end(const struct rank_line *line, unsigned char sep, size_t field_start);
 static size_t merge_heap_build(size_t *heap, const struct merge_run *runs, size_t run_count);
 static void merge_heap_sift_down(size_t *heap, size_t heap_len, size_t root, const struct rank_lines *lines, struct rank_cmp_context *cmp, const struct merge_run *runs);
 static bool merge_run_less(const struct rank_lines *lines, struct rank_cmp_context *cmp, const struct merge_run *runs, size_t a, size_t b);
@@ -297,7 +292,7 @@ merge_head_cache_update(struct merge_head_cache *caches, const struct rank_lines
     struct rank_key_span span;
 
     if (mode == MERGE_FAST_KEY_NUMERIC || mode == MERGE_FAST_KEY_GENERAL_NUMERIC || mode == MERGE_FAST_KEY_HUMAN_NUMERIC || mode == MERGE_FAST_KEY_MONTH || mode == MERGE_FAST_KEY_VERSION || mode == MERGE_FAST_KEY_BYTE) {
-        span = merge_extract_simple_key(line, options);
+        span = rank_simple_key_span(line->text, line->len, options);
         caches[run_id].key_ptr = span.ptr;
         caches[run_id].key_len = span.len;
     } else {
@@ -324,96 +319,6 @@ merge_head_cache_update(struct merge_head_cache *caches, const struct rank_lines
     default:
         break;
     }
-}
-
-static struct rank_key_span
-merge_extract_simple_key(const struct rank_line *line, const struct rank_options *options)
-{
-    const struct rank_keydef *key = &options->keys[0];
-    struct rank_key_span span;
-    size_t start;
-    size_t end;
-
-    if (options->has_field_separator) {
-        start = merge_explicit_field_start(line, options->field_separator, key->start_field);
-        end = merge_explicit_field_end(line, options->field_separator, start);
-    } else {
-        bool ignore_blanks = options->ignore_leading_blanks || key->ignore_start_blanks;
-
-        start = merge_blank_field_start(line, key->start_field, ignore_blanks);
-        end = merge_blank_field_end(line, start);
-    }
-    if (end < start) {
-        end = start;
-    }
-    span.ptr = line->text + start;
-    span.len = end - start;
-    return span;
-}
-
-static size_t
-merge_blank_field_start(const struct rank_line *line, size_t field, bool ignore_blanks)
-{
-    size_t i = 0;
-    size_t current = 0;
-
-    while (i < line->len) {
-        size_t blanks = i;
-
-        i += rank_scan_nonblank(line->text + i, line->len - i);
-        if (i == line->len) {
-            return line->len;
-        }
-        current++;
-        if (current == field) {
-            return ignore_blanks ? i : blanks;
-        }
-        i += rank_scan_blank(line->text + i, line->len - i);
-    }
-    return line->len;
-}
-
-static size_t
-merge_blank_field_end(const struct rank_line *line, size_t field_start)
-{
-    size_t i = field_start;
-
-    i += rank_scan_nonblank(line->text + i, line->len - i);
-    i += rank_scan_blank(line->text + i, line->len - i);
-    return i;
-}
-
-static size_t
-merge_explicit_field_start(const struct rank_line *line, unsigned char sep, size_t field)
-{
-    size_t current = 1;
-    size_t i;
-
-    if (field == 1) {
-        return 0;
-    }
-    for (i = 0; i < line->len; i++) {
-        if (line->text[i] == sep) {
-            current++;
-            if (current == field) {
-                return i + 1U;
-            }
-        }
-    }
-    return line->len;
-}
-
-static size_t
-merge_explicit_field_end(const struct rank_line *line, unsigned char sep, size_t field_start)
-{
-    size_t i;
-
-    for (i = field_start; i < line->len; i++) {
-        if (line->text[i] == sep) {
-            return i;
-        }
-    }
-    return line->len;
 }
 
 static size_t

@@ -267,6 +267,34 @@ run_check_case check-key-disorder 'x 2\ny 1\n' -c -k2,2n
 run_check_case check-unique-dupe 'a\na\n' -cu
 run_check_case check-unique-key-dupe 'x 1\ny 1\n' -cu -k2,2n
 run_check_case check-version 'pkg-1.0\npkg-1.1\npkg-1.10\n' -cV
+run_check_case check-fold-sorted 'a\nB\n' -cf
+run_check_case check-fold-disorder 'B\na\n' -cf
+run_check_case check-key-byte 'x a\ny b\n' -c -k2,2
+run_check_case check-key-byte-disorder 'x b\ny a\n' -c -k2,2
+run_check_case check-key-byte-sep 'x,a\ny,b\n' -c -t, -k2,2
+run_check_case check-key-last-resort 'a 1\nb 1\n' -c -k2,2
+run_check_case check-key-last-resort-disorder 'b 1\na 1\n' -c -k2,2
+run_check_case check-key-month 'x Jan\ny Feb\n' -c -k2,2M
+run_check_case check-key-human 'x 1K\ny 1M\n' -c -k2,2h
+run_check_case check-key-general 'x 1e1\ny 2e1\n' -c -k2,2g
+run_check_case check-key-version 'x pkg-1.2\ny pkg-1.10\n' -c -k2,2V
+run_check_case check-key-reverse 'x 3\ny 2\n' -c -r -k2,2n
+run_check_case check-key-local-reverse 'x 3\ny 2\n' -c -k2,2nr
+
+if locale_available en_US.UTF-8; then
+    check_locale_in=${TMPDIR:-/tmp}/rank-check-locale-in.$$
+    check_locale_status=0
+    check_locale_want_status=0
+    printf 'apple\nZebra\n' > "$check_locale_in"
+    LC_ALL=en_US.UTF-8 ./rank -c "$check_locale_in" || check_locale_status=$?
+    if test -n "$gnu_sort"; then
+        LC_ALL=en_US.UTF-8 "$gnu_sort" -c "$check_locale_in" 2>/dev/null || check_locale_want_status=$?
+    else
+        LC_ALL=en_US.UTF-8 ./rank -c "$check_locale_in" || check_locale_want_status=$?
+    fi
+    test "$check_locale_status" -eq "$check_locale_want_status"
+    rm -f "$check_locale_in"
+fi
 run_merge_case merge-basic 'a\nc\n' 'b\nd\n'
 run_merge_case merge-missing-newline 'a\nc' 'b\nd'
 run_merge_case merge-empty-record '\na\n' '\nb\n'

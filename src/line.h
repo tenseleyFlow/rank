@@ -60,6 +60,7 @@ void rank_lines_free(struct rank_lines *lines);
 bool rank_lines_read_all(struct rank_lines *lines, const struct rank_options *options);
 bool rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *options);
 const struct rank_key_span *rank_line_key_span(const struct rank_lines *lines, const struct rank_line *line, size_t key_id);
+struct rank_key_span rank_simple_key_span(const unsigned char *text, size_t len, const struct rank_options *options);
 const struct rank_transformed_span *rank_line_transform(const struct rank_lines *lines, const struct rank_line *line);
 const struct rank_transformed_span *rank_line_key_transform(const struct rank_lines *lines, const struct rank_line *line, size_t key_id);
 const struct rank_numeric_value *rank_line_number(const struct rank_lines *lines, const struct rank_line *line);

@@ -1,6 +1,8 @@
 #include "check.h"
 
 #include "cmp.h"
+#include "numeric.h"
+#include "rank_locale.h"
 #include "util.h"
 
 #include <errno.h>
@@ -20,15 +22,36 @@ struct check_record {
     size_t number;
 };
 
+enum check_fast_kind {
+    CHECK_FAST_NONE = 0,
+    CHECK_FAST_BYTES,
+    CHECK_FAST_KEY
+};
+
+struct check_key_cache {
+    struct rank_key_span span;
+    struct rank_numeric_value number;
+    struct rank_general_numeric_value general_number;
+    struct rank_human_numeric_value human_number;
+    struct rank_month_value month;
+};
+
 struct check_compare {
     struct rank_lines lines;
+    enum check_fast_kind fast;
+    enum rank_sort_mode key_mode;
+    struct check_key_cache prev_key;
+    bool prev_key_valid;
 };
 
 static const char *check_input_name(const struct rank_options *options);
 static void check_disorder_diag(const struct rank_options *options, const char *name, const unsigned char *text, size_t len, size_t record_number);
 static int check_fd(const struct rank_options *options, int fd, const char *name);
-static void check_compare_init(struct check_compare *compare);
+static void check_compare_init(struct check_compare *compare, const struct rank_options *options);
 static void check_compare_free(struct check_compare *compare);
+static enum check_fast_kind check_fast_kind_from_options(const struct rank_options *options, enum rank_sort_mode *key_mode);
+static bool check_key_records_disordered(const struct rank_options *options, struct check_compare *compare, const struct check_record *previous, const struct check_record *current);
+static void check_key_cache_fill(const struct rank_options *options, enum rank_sort_mode mode, const struct check_record *record, struct check_key_cache *cache);
 static bool check_record_append(struct check_record *record, const unsigned char *data, size_t len);
 static bool check_process_record(const struct rank_options *options, const char *name, struct check_compare *compare, struct check_record *previous, struct check_record *current, bool *have_previous, int *status);
 static bool check_records_disordered(const struct rank_options *options, struct check_compare *compare, const struct check_record *previous, const struct check_record *current, int *status);
@@ -109,7 +132,7 @@ check_fd(const struct rank_options *options, int fd, const char *name)
     bool have_previous = false;
     int status = RANK_EXIT_SUCCESS;
 
-    check_compare_init(&compare);
+    check_compare_init(&compare, options);
 
     for (;;) {
         ssize_t nread = read(fd, buf, sizeof(buf));
@@ -214,6 +237,125 @@ check_process_record(const struct rank_options *options, const char *name, struc
     return true;
 }
 
+static enum check_fast_kind
+check_fast_kind_from_options(const struct rank_options *options, enum rank_sort_mode *key_mode)
+{
+    const struct rank_keydef *key;
+    enum rank_sort_mode mode;
+
+    if (!rank_locale_collation_identity()) {
+        return CHECK_FAST_NONE;
+    }
+    if (options->key_count == 0) {
+        if (options->sort_mode == RANK_SORT_BYTE
+            && !options->ignore_case && !options->dictionary_order && !options->ignore_nonprinting) {
+            return CHECK_FAST_BYTES;
+        }
+        return CHECK_FAST_NONE;
+    }
+    if (options->key_count != 1) {
+        return CHECK_FAST_NONE;
+    }
+    key = &options->keys[0];
+    if (!(key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char)) {
+        return CHECK_FAST_NONE;
+    }
+    if (options->has_field_separator && (options->ignore_leading_blanks || key->ignore_start_blanks || key->ignore_end_blanks)) {
+        return CHECK_FAST_NONE;
+    }
+    mode = key->sort_mode != RANK_SORT_BYTE ? key->sort_mode : options->sort_mode;
+    switch (mode) {
+    case RANK_SORT_BYTE:
+        if (options->ignore_case || options->dictionary_order || options->ignore_nonprinting
+            || key->ignore_case || key->dictionary_order || key->ignore_nonprinting) {
+            return CHECK_FAST_NONE;
+        }
+        break;
+    case RANK_SORT_NUMERIC:
+    case RANK_SORT_GENERAL_NUMERIC:
+    case RANK_SORT_HUMAN_NUMERIC:
+    case RANK_SORT_MONTH:
+    case RANK_SORT_VERSION:
+        break;
+    default:
+        return CHECK_FAST_NONE;
+    }
+    *key_mode = mode;
+    return CHECK_FAST_KEY;
+}
+
+static void
+check_key_cache_fill(const struct rank_options *options, enum rank_sort_mode mode, const struct check_record *record, struct check_key_cache *cache)
+{
+    cache->span = rank_simple_key_span(record->data, record->len, options);
+    switch (mode) {
+    case RANK_SORT_NUMERIC:
+        cache->number = rank_numeric_parse(cache->span.ptr, cache->span.len);
+        break;
+    case RANK_SORT_GENERAL_NUMERIC:
+        cache->general_number = rank_general_numeric_parse(cache->span.ptr, cache->span.len);
+        break;
+    case RANK_SORT_HUMAN_NUMERIC:
+        cache->human_number = rank_human_numeric_parse(cache->span.ptr, cache->span.len);
+        break;
+    case RANK_SORT_MONTH:
+        cache->month = rank_month_parse(cache->span.ptr, cache->span.len);
+        break;
+    default:
+        break;
+    }
+}
+
+/* The record buffers swap roles on promote, so the cached spans and
+   parse results for the current record stay valid when it becomes the
+   previous record. */
+static bool
+check_key_records_disordered(const struct rank_options *options, struct check_compare *compare, const struct check_record *previous, const struct check_record *current)
+{
+    struct check_key_cache cur;
+    bool key_equal;
+    int result;
+
+    if (!compare->prev_key_valid) {
+        check_key_cache_fill(options, compare->key_mode, previous, &compare->prev_key);
+        compare->prev_key_valid = true;
+    }
+    check_key_cache_fill(options, compare->key_mode, current, &cur);
+
+    switch (compare->key_mode) {
+    case RANK_SORT_NUMERIC:
+        result = rank_numeric_compare_values(&compare->prev_key.number, &cur.number);
+        break;
+    case RANK_SORT_GENERAL_NUMERIC:
+        result = rank_general_numeric_compare_values(&compare->prev_key.general_number, &cur.general_number);
+        break;
+    case RANK_SORT_HUMAN_NUMERIC:
+        result = rank_human_numeric_compare_values(&compare->prev_key.human_number, &cur.human_number);
+        break;
+    case RANK_SORT_MONTH:
+        result = rank_month_compare_values(&compare->prev_key.month, &cur.month);
+        break;
+    case RANK_SORT_VERSION:
+        result = rank_version_compare(compare->prev_key.span.ptr, compare->prev_key.span.len, cur.span.ptr, cur.span.len);
+        break;
+    default:
+        result = check_compare_bytes(compare->prev_key.span.ptr, compare->prev_key.span.len, cur.span.ptr, cur.span.len);
+        break;
+    }
+    if (options->keys[0].reverse) {
+        result = -result;
+    }
+    key_equal = result == 0;
+    if (result == 0 && !(options->stable || options->unique)) {
+        result = check_compare_bytes(previous->data, previous->len, current->data, current->len);
+    }
+    if (options->reverse) {
+        result = -result;
+    }
+    compare->prev_key = cur;
+    return result > 0 || (options->unique && key_equal);
+}
+
 static bool
 check_records_disordered(const struct rank_options *options, struct check_compare *compare, const struct check_record *previous, const struct check_record *current, int *status)
 {
@@ -221,12 +363,15 @@ check_records_disordered(const struct rank_options *options, struct check_compar
     int result;
     bool disordered;
 
-    if (options->key_count == 0 && options->sort_mode == RANK_SORT_BYTE) {
+    if (compare->fast == CHECK_FAST_BYTES) {
         result = check_compare_bytes(previous->data, previous->len, current->data, current->len);
         if (options->reverse) {
             result = -result;
         }
         return result > 0 || (options->unique && result == 0);
+    }
+    if (compare->fast == CHECK_FAST_KEY) {
+        return check_key_records_disordered(options, compare, previous, current);
     }
 
     compare->lines.items[0].text = previous->data;
@@ -246,8 +391,11 @@ check_records_disordered(const struct rank_options *options, struct check_compar
 }
 
 static void
-check_compare_init(struct check_compare *compare)
+check_compare_init(struct check_compare *compare, const struct rank_options *options)
 {
+    compare->key_mode = RANK_SORT_BYTE;
+    compare->fast = check_fast_kind_from_options(options, &compare->key_mode);
+    compare->prev_key_valid = false;
     rank_lines_init(&compare->lines);
     compare->lines.items = rank_xmalloc(2U * sizeof(compare->lines.items[0]));
     compare->lines.len = 2;
