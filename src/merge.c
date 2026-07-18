@@ -4,6 +4,7 @@
 #include "line.h"
 #include "numeric.h"
 #include "output.h"
+#include "rank_locale.h"
 #include "util.h"
 
 #include <errno.h>
@@ -57,6 +58,7 @@ enum merge_fast_mode {
     MERGE_FAST_KEY_HUMAN_NUMERIC,
     MERGE_FAST_KEY_MONTH,
     MERGE_FAST_KEY_VERSION,
+    MERGE_FAST_KEY_BYTE,
     MERGE_FAST_VERSION
 };
 
@@ -70,6 +72,8 @@ static void merge_head_cache_update(struct merge_head_cache *caches, const struc
 static struct rank_key_span merge_extract_simple_key(const struct rank_line *line, const struct rank_options *options);
 static size_t merge_blank_field_start(const struct rank_line *line, size_t field, bool ignore_blanks);
 static size_t merge_blank_field_end(const struct rank_line *line, size_t field_start);
+static size_t merge_explicit_field_start(const struct rank_line *line, unsigned char sep, size_t field);
+static size_t merge_explicit_field_end(const struct rank_line *line, unsigned char sep, size_t field_start);
 static bool merge_sort_blank(unsigned char byte);
 static size_t merge_heap_build(size_t *heap, const struct merge_run *runs, size_t run_count);
 static void merge_heap_sift_down(size_t *heap, size_t heap_len, size_t root, const struct rank_lines *lines, struct rank_cmp_context *cmp, const struct merge_run *runs);
@@ -134,8 +138,9 @@ static enum merge_fast_mode
 merge_fast_mode(const struct rank_options *options)
 {
     const struct rank_keydef *key;
+    enum rank_sort_mode mode;
 
-    if (options->debug || options->has_field_separator) {
+    if (options->debug || !rank_locale_collation_identity()) {
         return MERGE_FAST_NONE;
     }
     if (options->key_count == 0) {
@@ -158,27 +163,33 @@ merge_fast_mode(const struct rank_options *options)
         return MERGE_FAST_NONE;
     }
     key = &options->keys[0];
-    if ((key->sort_mode == RANK_SORT_NUMERIC || (key->sort_mode == RANK_SORT_BYTE && options->sort_mode == RANK_SORT_NUMERIC))
-        && key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char) {
+    if (!(key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char)) {
+        return MERGE_FAST_NONE;
+    }
+    if (options->has_field_separator && (options->ignore_leading_blanks || key->ignore_start_blanks || key->ignore_end_blanks)) {
+        return MERGE_FAST_NONE;
+    }
+    mode = key->sort_mode != RANK_SORT_BYTE ? key->sort_mode : options->sort_mode;
+    switch (mode) {
+    case RANK_SORT_NUMERIC:
         return MERGE_FAST_KEY_NUMERIC;
-    }
-    if ((key->sort_mode == RANK_SORT_GENERAL_NUMERIC || (key->sort_mode == RANK_SORT_BYTE && options->sort_mode == RANK_SORT_GENERAL_NUMERIC))
-        && key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char) {
+    case RANK_SORT_GENERAL_NUMERIC:
         return MERGE_FAST_KEY_GENERAL_NUMERIC;
-    }
-    if ((key->sort_mode == RANK_SORT_HUMAN_NUMERIC || (key->sort_mode == RANK_SORT_BYTE && options->sort_mode == RANK_SORT_HUMAN_NUMERIC))
-        && key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char) {
+    case RANK_SORT_HUMAN_NUMERIC:
         return MERGE_FAST_KEY_HUMAN_NUMERIC;
-    }
-    if ((key->sort_mode == RANK_SORT_MONTH || (key->sort_mode == RANK_SORT_BYTE && options->sort_mode == RANK_SORT_MONTH))
-        && key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char) {
+    case RANK_SORT_MONTH:
         return MERGE_FAST_KEY_MONTH;
-    }
-    if ((key->sort_mode == RANK_SORT_VERSION || (key->sort_mode == RANK_SORT_BYTE && options->sort_mode == RANK_SORT_VERSION))
-        && key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char) {
+    case RANK_SORT_VERSION:
         return MERGE_FAST_KEY_VERSION;
+    case RANK_SORT_BYTE:
+        if (options->ignore_case || options->dictionary_order || options->ignore_nonprinting
+            || key->ignore_case || key->dictionary_order || key->ignore_nonprinting) {
+            return MERGE_FAST_NONE;
+        }
+        return MERGE_FAST_KEY_BYTE;
+    default:
+        return MERGE_FAST_NONE;
     }
-    return MERGE_FAST_NONE;
 }
 
 static bool
@@ -285,7 +296,7 @@ merge_head_cache_update(struct merge_head_cache *caches, const struct rank_lines
     const struct rank_line *line = &lines->items[runs[run_id].pos];
     struct rank_key_span span;
 
-    if (mode == MERGE_FAST_KEY_NUMERIC || mode == MERGE_FAST_KEY_GENERAL_NUMERIC || mode == MERGE_FAST_KEY_HUMAN_NUMERIC || mode == MERGE_FAST_KEY_MONTH || mode == MERGE_FAST_KEY_VERSION) {
+    if (mode == MERGE_FAST_KEY_NUMERIC || mode == MERGE_FAST_KEY_GENERAL_NUMERIC || mode == MERGE_FAST_KEY_HUMAN_NUMERIC || mode == MERGE_FAST_KEY_MONTH || mode == MERGE_FAST_KEY_VERSION || mode == MERGE_FAST_KEY_BYTE) {
         span = merge_extract_simple_key(line, options);
         caches[run_id].key_ptr = span.ptr;
         caches[run_id].key_len = span.len;
@@ -319,51 +330,98 @@ static struct rank_key_span
 merge_extract_simple_key(const struct rank_line *line, const struct rank_options *options)
 {
     const struct rank_keydef *key = &options->keys[0];
-    bool ignore_blanks = options->ignore_leading_blanks || key->ignore_start_blanks;
-    size_t start = merge_blank_field_start(line, key->start_field, ignore_blanks);
-    size_t end = merge_blank_field_end(line, start);
     struct rank_key_span span;
+    size_t start;
+    size_t end;
 
+    if (options->has_field_separator) {
+        start = merge_explicit_field_start(line, options->field_separator, key->start_field);
+        end = merge_explicit_field_end(line, options->field_separator, start);
+    } else {
+        bool ignore_blanks = options->ignore_leading_blanks || key->ignore_start_blanks;
+
+        start = merge_blank_field_start(line, key->start_field, ignore_blanks);
+        end = merge_blank_field_end(line, start);
+    }
+    if (end < start) {
+        end = start;
+    }
     span.ptr = line->text + start;
-    span.len = end >= start ? end - start : 0;
+    span.len = end - start;
     return span;
 }
 
 static size_t
 merge_blank_field_start(const struct rank_line *line, size_t field, bool ignore_blanks)
 {
-    size_t pos = 0;
-    size_t current = 1;
+    size_t i = 0;
+    size_t current = 0;
 
-    while (current < field && pos < line->len) {
-        while (pos < line->len && merge_sort_blank(line->text[pos])) {
-            pos++;
+    while (i < line->len) {
+        size_t blanks = i;
+
+        while (i < line->len && merge_sort_blank(line->text[i])) {
+            i++;
         }
-        while (pos < line->len && !merge_sort_blank(line->text[pos])) {
-            pos++;
+        if (i == line->len) {
+            return line->len;
         }
         current++;
-    }
-    while (pos < line->len && merge_sort_blank(line->text[pos])) {
-        pos++;
-    }
-    if (ignore_blanks) {
-        while (pos < line->len && merge_sort_blank(line->text[pos])) {
-            pos++;
+        if (current == field) {
+            return ignore_blanks ? i : blanks;
+        }
+        while (i < line->len && !merge_sort_blank(line->text[i])) {
+            i++;
         }
     }
-    return pos;
+    return line->len;
 }
 
 static size_t
 merge_blank_field_end(const struct rank_line *line, size_t field_start)
 {
-    size_t pos = field_start;
+    size_t i = field_start;
 
-    while (pos < line->len && !merge_sort_blank(line->text[pos])) {
-        pos++;
+    while (i < line->len && merge_sort_blank(line->text[i])) {
+        i++;
     }
-    return pos;
+    while (i < line->len && !merge_sort_blank(line->text[i])) {
+        i++;
+    }
+    return i;
+}
+
+static size_t
+merge_explicit_field_start(const struct rank_line *line, unsigned char sep, size_t field)
+{
+    size_t current = 1;
+    size_t i;
+
+    if (field == 1) {
+        return 0;
+    }
+    for (i = 0; i < line->len; i++) {
+        if (line->text[i] == sep) {
+            current++;
+            if (current == field) {
+                return i + 1U;
+            }
+        }
+    }
+    return line->len;
+}
+
+static size_t
+merge_explicit_field_end(const struct rank_line *line, unsigned char sep, size_t field_start)
+{
+    size_t i;
+
+    for (i = field_start; i < line->len; i++) {
+        if (line->text[i] == sep) {
+            return i;
+        }
+    }
+    return line->len;
 }
 
 static bool
@@ -431,7 +489,7 @@ merge_fast_run_less(const struct rank_lines *lines, const struct rank_options *o
         result = merge_head_cache_compare(&caches[a], &caches[b], mode);
         break;
     }
-    if (mode == MERGE_FAST_KEY_NUMERIC || mode == MERGE_FAST_KEY_GENERAL_NUMERIC || mode == MERGE_FAST_KEY_HUMAN_NUMERIC || mode == MERGE_FAST_KEY_MONTH || mode == MERGE_FAST_KEY_VERSION) {
+    if (mode == MERGE_FAST_KEY_NUMERIC || mode == MERGE_FAST_KEY_GENERAL_NUMERIC || mode == MERGE_FAST_KEY_HUMAN_NUMERIC || mode == MERGE_FAST_KEY_MONTH || mode == MERGE_FAST_KEY_VERSION || mode == MERGE_FAST_KEY_BYTE) {
         if (options->keys[0].reverse) {
             result = -result;
         }
@@ -467,6 +525,8 @@ merge_head_cache_compare(const struct merge_head_cache *a, const struct merge_he
     case MERGE_FAST_MONTH:
     case MERGE_FAST_KEY_MONTH:
         return rank_month_compare_values(&a->month, &b->month);
+    case MERGE_FAST_KEY_BYTE:
+        return merge_compare_bytes(a->key_ptr, a->key_len, b->key_ptr, b->key_len);
     default:
         return rank_version_compare(a->key_ptr, a->key_len, b->key_ptr, b->key_len);
     }
@@ -549,7 +609,8 @@ merge_fast_flush_iov(int fd, struct iovec *iov, int *iov_count)
 static bool
 merge_can_stream_bytes(const struct rank_options *options)
 {
-    return options->key_count == 0 && options->sort_mode == RANK_SORT_BYTE && !options->debug;
+    return options->key_count == 0 && options->sort_mode == RANK_SORT_BYTE && !options->debug
+        && rank_locale_collation_identity();
 }
 
 static bool

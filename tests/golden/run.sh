@@ -273,6 +273,30 @@ run_merge_case merge-key-general 'x 1e1\nx 3e1\n' 'x 2e1\nx 4e1\n' -k2,2g
 run_merge_case merge-key-human 'x 1K\nx 3K\n' 'x 2K\nx 4K\n' -k2,2h
 run_merge_case merge-key-month 'x Jan\nx Mar\n' 'x Feb\nx Apr\n' -k2,2M
 run_merge_case merge-key-version 'x pkg-1.0\nx pkg-1.10\n' 'x pkg-1.2\nx pkg-2.0\n' -k2,2V
+run_merge_case merge-key-byte 'x a\nz b\n' 'y a\nw c\n' -k2,2
+run_merge_case merge-key-byte-sep 'x,a\nz,b\n' 'y,a\nw,c\n' -t, -k2,2
+run_merge_case merge-key-byte-reverse 'z b\nx a\n' 'w c\ny a\n' -k2,2r
+run_merge_case merge-key-byte-unique 'x a\nz b\n' 'y a\nw c\n' -u -k2,2
+run_merge_case merge-key-byte-stable 'x a\nz b\n' 'y a\nw c\n' -s -k2,2
+run_merge_case merge-key-byte-blanks 'x  a\nz b\n' 'y   a\nw c\n' -k2,2
+run_merge_case merge-key-numeric-sep 'x,1\nz,3\n' 'y,2\nw,4\n' -t, -k2,2n
+
+if locale_available en_US.UTF-8; then
+    merge_locale_a=${TMPDIR:-/tmp}/rank-merge-locale-a.$$
+    merge_locale_b=${TMPDIR:-/tmp}/rank-merge-locale-b.$$
+    merge_locale_got=${TMPDIR:-/tmp}/rank-merge-locale-got.$$
+    merge_locale_want=${TMPDIR:-/tmp}/rank-merge-locale-want.$$
+    printf 'Zebra\n' > "$merge_locale_a"
+    printf 'apple\n' > "$merge_locale_b"
+    LC_ALL=en_US.UTF-8 ./rank -m "$merge_locale_a" "$merge_locale_b" > "$merge_locale_got"
+    if test -n "$gnu_sort"; then
+        LC_ALL=en_US.UTF-8 "$gnu_sort" -m "$merge_locale_a" "$merge_locale_b" > "$merge_locale_want"
+    else
+        LC_ALL=en_US.UTF-8 sort -m "$merge_locale_a" "$merge_locale_b" > "$merge_locale_want"
+    fi
+    cmp "$merge_locale_got" "$merge_locale_want"
+    rm -f "$merge_locale_a" "$merge_locale_b" "$merge_locale_got" "$merge_locale_want"
+fi
 
 merge_output_a=${TMPDIR:-/tmp}/rank-merge-output-a.$$
 merge_output_b=${TMPDIR:-/tmp}/rank-merge-output-b.$$

@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+export LC_ALL=C
+
 mkdir -p bench/results
 stamp=$(date '+%Y%m%d%H%M%S')
 out="bench/results/merge-$stamp.txt"
@@ -61,5 +63,9 @@ printf 'many-runs-version rank_real=%s gnu_real=%s args=-m -V files=16 records=1
 rank_key_version_time=$({ /usr/bin/time -p ./rank -m -k2,2V $key_files >/dev/null; } 2>&1 | sed -n 's/^real //p')
 gnu_key_version_time=$({ /usr/bin/time -p "$gnu_sort" -m -k2,2V $key_files >/dev/null; } 2>&1 | sed -n 's/^real //p')
 printf 'many-runs-key-version rank_real=%s gnu_real=%s args=-m -k2,2V files=16 records=160000\n' "$rank_key_version_time" "$gnu_key_version_time" >> "$out"
+
+rank_key_byte_time=$({ /usr/bin/time -p ./rank -m -k2,2 $key_files >/dev/null; } 2>&1 | sed -n 's/^real //p')
+gnu_key_byte_time=$({ /usr/bin/time -p "$gnu_sort" -m -k2,2 $key_files >/dev/null; } 2>&1 | sed -n 's/^real //p')
+printf 'many-runs-key-byte rank_real=%s gnu_real=%s args=-m -k2,2 files=16 records=160000\n' "$rank_key_byte_time" "$gnu_key_byte_time" >> "$out"
 
 printf 'merge smoke wrote %s\n' "$out"

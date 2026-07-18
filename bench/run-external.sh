@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+export LC_ALL=C
+
 mkdir -p bench/results
 stamp=$(date '+%Y%m%d%H%M%S')
 out="bench/results/external-$stamp.txt"
