@@ -41,7 +41,7 @@ cat > config.h <<EOF
 #ifndef RANK_CONFIG_H
 #define RANK_CONFIG_H
 
-#define RANK_VERSION "0.0.0-sprint01"
+#define RANK_VERSION "0.1.0"
 #define RANK_HAVE_MMAP $have_mmap
 #define RANK_HAVE_POSIX_FADVISE $have_posix_fadvise
 #define RANK_ENDIAN_$endian 1

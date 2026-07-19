@@ -1,0 +1,164 @@
+.TH RANK 1 "July 2026" "rank 0.1.0" "User Commands"
+.SH NAME
+rank \- sort lines of text files, byte-compatible with GNU sort
+.SH SYNOPSIS
+.B rank
+[\fIOPTION\fR]... [\fIFILE\fR]...
+.br
+.B rank
+[\fIOPTION\fR]... \fB\-\-files0\-from\fR=\fIF\fR
+.SH DESCRIPTION
+.B rank
+sorts the concatenation of the given FILEs (or standard input) to
+standard output. It is a from-scratch reimplementation of GNU
+.BR sort (1)
+targeting byte-identical output, diagnostics, and exit codes, with an
+MSD byte-radix engine and per-line precomputed key metadata instead of
+repeated comparator work.
+.PP
+With no FILE, or when FILE is \fB\-\fR, standard input is read.
+.SH OPTIONS
+.SS Ordering options
+.TP
+.BR \-b ", " \-\-ignore\-leading\-blanks
+Ignore leading blanks when locating sort keys, or, with no keys, skip
+leading blanks in the comparison.
+.TP
+.BR \-d ", " \-\-dictionary\-order
+Consider only blanks and alphanumeric characters.
+.TP
+.BR \-f ", " \-\-ignore\-case
+Fold lower case to upper case for comparison.
+.TP
+.BR \-g ", " \-\-general\-numeric\-sort
+Compare according to general numerical value (strtold semantics,
+including infinities and NaNs).
+.TP
+.BR \-h ", " \-\-human\-numeric\-sort
+Compare human-readable numbers (e.g. 2K, 1G).
+.TP
+.BR \-i ", " \-\-ignore\-nonprinting
+Consider only printable characters.
+.TP
+.BR \-M ", " \-\-month\-sort
+Compare month names: unknown < JAN < ... < DEC.
+.TP
+.BR \-n ", " \-\-numeric\-sort
+Compare according to string numerical value.
+.TP
+.BR \-R ", " \-\-random\-sort
+Shuffle by a keyed hash, grouping identical keys. Byte-compatible with
+GNU sort's MD5 ordering; with the same \fB\-\-random\-source\fR both
+produce the same output.
+.TP
+.BR \-V ", " \-\-version\-sort
+Natural sort of version numbers within text.
+.TP
+.BR \-r ", " \-\-reverse
+Reverse the result of comparisons.
+.TP
+\fB\-\-sort\fR=\fIWORD\fR
+Select the ordering: general\-numeric (g), human\-numeric (h), month
+(M), numeric (n), random (R), version (V).
+.TP
+\fB\-\-random\-source\fR=\fIFILE\fR
+Get the 16 random seed bytes from FILE. Fewer than 16 bytes is an
+error; extra bytes are ignored.
+.PP
+Combining ordering modes (for example \fB\-n \-V\fR) is rejected, as in
+GNU sort. Global ordering options apply to a key only when that key has
+no options of its own.
+.SS Key and field options
+.TP
+\fB\-k\fR, \fB\-\-key\fR=\fIKEYDEF\fR
+Sort by a key. KEYDEF is \fIF\fR[.\fIC\fR][\fIOPTS\fR][,\fIF\fR[.\fIC\fR][\fIOPTS\fR]]
+with 1-based field and character positions. OPTS are one or more of
+\fBbdfghinrMRV\fR, applying that option to this key only. Obsolete
+\fB+POS \-POS\fR syntax is also accepted.
+.TP
+\fB\-t\fR, \fB\-\-field\-separator\fR=\fISEP\fR
+Use SEP as the field separator; adjacent separators delimit empty
+fields. Without \fB\-t\fR, fields are runs of non-blank characters
+separated by blanks, and leading blanks belong to the following field.
+.TP
+.B \-\-debug
+Annotate the part of each line used for sorting and warn about
+questionable key usage.
+.SS Other options
+.TP
+.BR \-c ", " \-\-check ", " \-\-check=diagnose\-first
+Check whether input is sorted; report the first disorder. Exit status 1
+on disorder.
+.TP
+.BR \-C ", " \-\-check=quiet ", " \-\-check=silent
+Like \fB\-c\fR without the disorder diagnostic.
+.TP
+.BR \-m ", " \-\-merge
+Merge already sorted files; do not sort.
+.TP
+.BR \-o ", " \-\-output\fR=\fIFILE\fR
+Write to FILE instead of standard output. Sorting a file onto itself is
+safe.
+.TP
+.BR \-s ", " \-\-stable
+Stabilize by disabling the last-resort whole-line comparison.
+.TP
+.BR \-u ", " \-\-unique
+Output only the first of runs comparing equal under the active keys.
+.TP
+.BR \-z ", " \-\-zero\-terminated
+Line delimiter is NUL, not newline.
+.TP
+\fB\-S\fR, \fB\-\-buffer\-size\fR=\fISIZE\fR
+Use SIZE (with optional K/M/G suffix) for the main memory buffer;
+larger inputs sort externally through temporary files.
+.TP
+\fB\-T\fR, \fB\-\-temporary\-directory\fR=\fIDIR\fR
+Store temporaries in DIR; may be repeated to rotate directories.
+.TP
+\fB\-\-batch\-size\fR=\fINMERGE\fR
+Merge at most NMERGE inputs at once.
+.TP
+\fB\-\-compress\-program\fR=\fIPROG\fR
+Filter temporary files through PROG; PROG must compress standard input
+to standard output and decompress with PROG \-d.
+.TP
+\fB\-\-parallel\fR=\fIN\fR
+Use up to N worker threads for large in-memory sorts. Output is
+byte-identical to a single-threaded run.
+.TP
+\fB\-\-files0\-from\fR=\fIF\fR
+Read NUL-terminated input file names from F (or standard input when F
+is \fB\-\fR); cannot be combined with file operands.
+.TP
+.B \-\-help
+Display help and exit.
+.TP
+.B \-\-version
+Output version information and exit.
+.SH ENVIRONMENT
+.TP
+.BR LC_COLLATE ", " LC_CTYPE ", " LC_NUMERIC ", " LC_TIME
+Honored as in GNU sort. In C/POSIX and probed identity locales rank
+sorts raw bytes with its radix engine; other locales use collation
+transforms or comparator fallback.
+.TP
+.B TMPDIR
+Default location for temporary files when \fB\-T\fR is not given.
+.PP
+Debug variables, subject to change: \fBRANK_DEBUG_PLAN\fR (print the
+selected execution plan), \fBRANK_DEBUG_STATS\fR (engine counters),
+\fBRANK_DEBUG_VERIFY\fR (verify output against the scalar comparator),
+\fBRANK_FORCE_SCALAR\fR, \fBRANK_FORCE_READ\fR, \fBRANK_PARALLEL_MIN\fR.
+.SH EXIT STATUS
+0 on success, 1 when \fB\-c\fR/\fB\-C\fR finds disorder, 2 on error.
+.SH NOTES
+rank accepts the obsolete \fB+POS \-POS\fR key syntax unconditionally,
+where GNU sort requires _POSIX2_VERSION=199209. With \fB\-R\fR combined
+with \fB\-d\fR/\fB\-f\fR/\fB\-i\fR in a non-C multibyte locale, rank
+hashes ASCII-translated bytes where GNU consults locale tables.
+.SH SEE ALSO
+.BR sort (1)
+.PP
+Full documentation of the parity contract and benchmarks ships in the
+source tree.
