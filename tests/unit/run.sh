@@ -72,6 +72,11 @@ status=0
 test "$status" -eq 2
 grep "rank: invalid --parallel argument '0'" /tmp/rank-bad-parallel.err >/dev/null
 
+status=0
+./rank --files0-from >/tmp/rank-bad-files0.out 2>/tmp/rank-bad-files0.err || status=$?
+test "$status" -eq 2
+grep "rank: option '--files0-from' requires an argument" /tmp/rank-bad-files0.err >/dev/null
+
 RANK_DEBUG_PLAN=1 ./rank /tmp/rank-file.in >/tmp/rank-plan.out 2>/tmp/rank-plan.err
 grep 'rank: plan=radix-bytes reason=whole-line byte radix' /tmp/rank-plan.err >/dev/null
 cmp /tmp/rank-plan.out /tmp/rank-file.want
@@ -306,6 +311,7 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-parallel-key.out /tmp/rank-parallel-key.want \
     /tmp/rank-parallel-multi.out /tmp/rank-parallel-multi.want \
     /tmp/rank-bad-parallel.out /tmp/rank-bad-parallel.err \
+    /tmp/rank-bad-files0.out /tmp/rank-bad-files0.err \
     /tmp/rank-plan.out /tmp/rank-plan.err /tmp/rank-plan-cutf8.out \
     /tmp/rank-plan-cutf8.err /tmp/rank-plan-cutf8-key.out \
     /tmp/rank-plan-cutf8-key.err /tmp/rank-plan-fold.out \

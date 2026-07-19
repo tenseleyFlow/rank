@@ -50,6 +50,9 @@ struct rank_options {
     bool has_batch_size;
     size_t parallel;
     const char *compress_program;
+    const char *files0_from;
+    unsigned char *files0_buf;
+    char **files0_names;
     struct rank_keydef *keys;
     size_t key_count;
     size_t key_cap;
@@ -59,6 +62,7 @@ struct rank_options {
 
 void rank_options_init(struct rank_options *options, const char *argv0);
 int rank_options_parse(struct rank_options *options, int argc, char **argv);
+int rank_options_load_files0(struct rank_options *options);
 void rank_options_print_help(FILE *stream);
 void rank_options_print_version(FILE *stream);
 

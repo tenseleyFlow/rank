@@ -5,11 +5,13 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static const char *rank_basename(const char *path);
 static int add_key(struct rank_options *options, const char *text);
@@ -57,6 +59,9 @@ rank_options_init(struct rank_options *options, const char *argv0)
     options->has_batch_size = false;
     options->parallel = 1;
     options->compress_program = NULL;
+    options->files0_from = NULL;
+    options->files0_buf = NULL;
+    options->files0_names = NULL;
     options->keys = NULL;
     options->key_count = 0;
     options->key_cap = 0;
@@ -294,6 +299,18 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
             }
             continue;
         }
+        if (strcmp(arg, "--files0-from") == 0) {
+            if (i + 1 == argc) {
+                rank_diag(options, "option '--files0-from' requires an argument");
+                return RANK_EXIT_SERIOUS;
+            }
+            options->files0_from = argv[++i];
+            continue;
+        }
+        if (strncmp(arg, "--files0-from=", 14) == 0) {
+            options->files0_from = arg + 14;
+            continue;
+        }
         if (strcmp(arg, "--parallel") == 0) {
             if (i + 1 == argc) {
                 rank_diag(options, "option '--parallel' requires an argument");
@@ -468,6 +485,115 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
     return RANK_OPTIONS_OK;
 }
 
+/* Expand --files0-from into the operand list. GNU semantics pinned
+   against coreutils 9.11: a trailing unterminated name still counts,
+   '-' entries are rejected with the standard-input message regardless
+   of the list's source, and zero-length names report their 1-based
+   position. */
+int
+rank_options_load_files0(struct rank_options *options)
+{
+    unsigned char *buf = NULL;
+    char **names = NULL;
+    size_t len = 0;
+    size_t cap = 0;
+    size_t name_count = 0;
+    size_t idx = 0;
+    size_t start = 0;
+    size_t i;
+    int fd = STDIN_FILENO;
+
+    if (options->files0_from == NULL) {
+        return RANK_OPTIONS_OK;
+    }
+    if (options->operand_count > 0) {
+        rank_diagf(options, "extra operand '%s'", options->operands[0]);
+        fprintf(stderr, "file operands cannot be combined with --files0-from\n");
+        fprintf(stderr, "Try '%s --help' for more information.\n", options->program_name);
+        return RANK_EXIT_SERIOUS;
+    }
+    if (strcmp(options->files0_from, "-") != 0) {
+        fd = open(options->files0_from, O_RDONLY);
+        if (fd < 0) {
+            rank_diagf(options, "open failed: %s: %s", options->files0_from, strerror(errno));
+            return RANK_EXIT_SERIOUS;
+        }
+    }
+    for (;;) {
+        unsigned char chunk[4096];
+        ssize_t nread = read(fd, chunk, sizeof(chunk));
+
+        if (nread < 0) {
+            rank_diagf(options, "cannot read file names from %s", options->files0_from);
+            if (fd != STDIN_FILENO) {
+                (void)close(fd);
+            }
+            free(buf);
+            return RANK_EXIT_SERIOUS;
+        }
+        if (nread == 0) {
+            break;
+        }
+        if (len + (size_t)nread + 1U > cap) {
+            cap = cap == 0 ? 4096U : cap * 2U;
+            while (cap < len + (size_t)nread + 1U) {
+                cap *= 2U;
+            }
+            buf = rank_xrealloc(buf, cap);
+        }
+        memcpy(buf + len, chunk, (size_t)nread);
+        len += (size_t)nread;
+    }
+    if (fd != STDIN_FILENO && close(fd) != 0) {
+        rank_diagf(options, "cannot read file names from %s", options->files0_from);
+        free(buf);
+        return RANK_EXIT_SERIOUS;
+    }
+
+    for (i = 0; i < len; i++) {
+        if (buf[i] == '\0') {
+            name_count++;
+        }
+    }
+    if (len > 0 && buf[len - 1U] != '\0') {
+        name_count++;
+    }
+    if (name_count == 0) {
+        rank_diagf(options, "no input from '%s'", options->files0_from);
+        free(buf);
+        return RANK_EXIT_SERIOUS;
+    }
+
+    buf[len] = '\0';
+    names = rank_xmalloc(name_count * sizeof(names[0]));
+    for (i = 0; i <= len && idx < name_count; i++) {
+        if (i == len || buf[i] == '\0') {
+            char *name = (char *)buf + start;
+
+            if (strcmp(name, "-") == 0) {
+                rank_diag(options, "when reading file names from standard input, no file name of '-' allowed");
+                free(names);
+                free(buf);
+                return RANK_EXIT_SERIOUS;
+            }
+            if (name[0] == '\0') {
+                rank_diagf(options, "%s:%lu: invalid zero-length file name", options->files0_from, (unsigned long)(idx + 1U));
+                free(names);
+                free(buf);
+                return RANK_EXIT_SERIOUS;
+            }
+            names[idx++] = name;
+            start = i + 1U;
+        }
+    }
+
+    options->files0_buf = buf;
+    options->files0_names = names;
+    options->operands = names;
+    options->operand_count = name_count;
+    return RANK_OPTIONS_OK;
+}
+
 static bool
 obsolete_key_start(const char *arg)
 {
@@ -581,6 +707,7 @@ rank_options_print_help(FILE *stream)
     fprintf(stream, "  -T, --temporary-directory=DIR  use DIR for temporaries\n");
     fprintf(stream, "      --batch-size=NMERGE  merge at most NMERGE inputs at once\n");
     fprintf(stream, "      --parallel=N  use up to N concurrent workers for sorting\n");
+    fprintf(stream, "      --files0-from=F  read input file names from F, NUL-terminated\n");
     fprintf(stream, "      --compress-program=PROG  compress temporary runs with PROG\n");
 }
 

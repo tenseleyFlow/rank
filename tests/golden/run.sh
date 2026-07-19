@@ -746,6 +746,60 @@ test "$status" -eq 2
 grep 'rank: cannot write: /tmp:' /tmp/rank-golden-bad-output.err >/dev/null
 rm -f /tmp/rank-golden-output-input /tmp/rank-golden-bad-output.out /tmp/rank-golden-bad-output.err
 
+files0_a=${TMPDIR:-/tmp}/rank-files0-a.$$
+files0_b=${TMPDIR:-/tmp}/rank-files0-b.$$
+files0_list=${TMPDIR:-/tmp}/rank-files0-list.$$
+files0_got=${TMPDIR:-/tmp}/rank-files0-got.$$
+files0_want=${TMPDIR:-/tmp}/rank-files0-want.$$
+printf 'c\nb\n' > "$files0_a"
+printf 'd\na\n' > "$files0_b"
+printf '%s\0%s\0' "$files0_a" "$files0_b" > "$files0_list"
+./rank --files0-from="$files0_list" > "$files0_got"
+if test -n "$gnu_sort"; then
+    "$gnu_sort" --files0-from="$files0_list" > "$files0_want"
+else
+    ./rank --files0-from="$files0_list" > "$files0_want"
+fi
+cmp "$files0_got" "$files0_want"
+printf '%s\0%s' "$files0_a" "$files0_b" > "$files0_list"
+./rank --files0-from="$files0_list" > "$files0_got"
+cmp "$files0_got" "$files0_want"
+printf '%s\0' "$files0_a" | ./rank --files0-from=- > "$files0_got"
+printf 'b\nc\n' > "$files0_want"
+cmp "$files0_got" "$files0_want"
+
+files0_err_case() {
+    name=$1
+    shift
+    got_err=${TMPDIR:-/tmp}/rank-$name-got.err.$$
+    want_err=${TMPDIR:-/tmp}/rank-$name-want.err.$$
+    got_status=0
+    want_status=0
+
+    ./rank "$@" >/dev/null 2>"$got_err" || got_status=$?
+    if test -n "$gnu_sort"; then
+        "$gnu_sort" "$@" >/dev/null 2>"$want_err" || want_status=$?
+        sed -e 's/^[^:]*sort:/rank:/' -e "s/Try '[^ ]*sort /Try 'rank /" "$want_err" > "$want_err.norm"
+        mv "$want_err.norm" "$want_err"
+    else
+        ./rank "$@" >/dev/null 2>"$want_err" || want_status=$?
+    fi
+    test "$got_status" -eq "$want_status"
+    cmp "$got_err" "$want_err"
+    rm -f "$got_err" "$want_err"
+}
+
+printf '%s\0%s\0' "$files0_a" "$files0_b" > "$files0_list"
+files0_err_case files0-extra --files0-from="$files0_list" "$files0_a"
+printf -- '-\0' > "$files0_list"
+files0_err_case files0-dash --files0-from="$files0_list"
+printf '%s\0\0%s\0' "$files0_a" "$files0_b" > "$files0_list"
+files0_err_case files0-zero-name --files0-from="$files0_list"
+: > "$files0_list"
+files0_err_case files0-empty-list --files0-from="$files0_list"
+files0_err_case files0-missing --files0-from="${TMPDIR:-/tmp}/rank-files0-nosuch.$$"
+rm -f "$files0_a" "$files0_b" "$files0_list" "$files0_got" "$files0_want"
+
 status=0
 ./rank --unsupported >/tmp/rank-golden.out 2>/tmp/rank-golden.err || status=$?
 test "$status" -eq 2

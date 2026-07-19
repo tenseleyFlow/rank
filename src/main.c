@@ -39,6 +39,10 @@ main(int argc, char **argv)
         return 0;
     }
 
+    if (rank_options_load_files0(&options) != RANK_OPTIONS_OK) {
+        free_options(&options);
+        return RANK_EXIT_SERIOUS;
+    }
     if (!rank_check_options_valid(&options)) {
         free_options(&options);
         return RANK_EXIT_SERIOUS;
@@ -98,4 +102,6 @@ free_options(struct rank_options *options)
 {
     free(options->keys);
     free(options->temporary_dirs);
+    free(options->files0_buf);
+    free(options->files0_names);
 }
