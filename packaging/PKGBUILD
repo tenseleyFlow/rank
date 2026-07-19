@@ -8,7 +8,7 @@ url="https://github.com/tenseleyFlow/rank"
 license=('MIT')
 makedepends=('gcc')
 source=("$url/releases/download/v$pkgver/rank-$pkgver.tar.gz")
-sha256sums=('RELEASE_SHA256_PENDING')
+sha256sums=('6cffe28390ed82e5a188e524c81e6789ccf8bf0c4a9e9f9b464e2c680392aed0')
 
 build() {
 	cd "$pkgname-$pkgver"

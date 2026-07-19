@@ -3,7 +3,7 @@ class Rank < Formula
   desc "Drop-in GNU sort replacement built on MSD radix sorting"
   homepage "https://github.com/tenseleyFlow/rank"
   url "https://github.com/tenseleyFlow/rank/releases/download/v0.1.1/rank-0.1.1.tar.gz"
-  sha256 "RELEASE_SHA256_PENDING"
+  sha256 "6cffe28390ed82e5a188e524c81e6789ccf8bf0c4a9e9f9b464e2c680392aed0"
   license "MIT"
 
   def install
