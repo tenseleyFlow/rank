@@ -31,7 +31,7 @@ CFLAGS += -std=c11 -pthread -Wall -Wextra -Werror -Wpedantic -Wshadow -Wstrict-p
 LDFLAGS ?=
 LDFLAGS += -pthread
 
-.PHONY: all check unit golden perf-smoke sanitize clean distclean ref-sort
+.PHONY: all check unit golden fuzz fuzz-smoke perf-smoke sanitize clean distclean ref-sort
 
 all: rank
 
@@ -44,13 +44,19 @@ rank: $(OBJ)
 %.o: %.c config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-check: unit golden perf-smoke
+check: unit golden fuzz-smoke perf-smoke
 
 unit: rank
 	sh tests/unit/run.sh
 
 golden: rank
 	sh tests/golden/run.sh
+
+fuzz-smoke: rank
+	FUZZ_TRIALS=25 sh tests/fuzz/run.sh || test $$? -eq 77
+
+fuzz: rank
+	sh tests/fuzz/run.sh
 
 perf-smoke: rank
 	sh bench/run-smoke.sh
