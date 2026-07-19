@@ -8,7 +8,7 @@ ${CC:-cc} -std=c11 -O2 -Wall -Wextra -Werror -Wconversion -Isrc -o /tmp/rank-sca
 rm -f /tmp/rank-scan-fuzz
 
 ./rank --version >/tmp/rank-version.out
-grep 'rank 0.1.0' /tmp/rank-version.out >/dev/null
+grep 'rank 0.1.1' /tmp/rank-version.out >/dev/null
 
 ./rank --help >/tmp/rank-help.out
 grep 'Usage: rank' /tmp/rank-help.out >/dev/null
