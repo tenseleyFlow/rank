@@ -51,6 +51,27 @@ cmp /tmp/rank-forceread.out /tmp/rank-file.want
 RANK_FORCE_READ=1 ./rank -s -k1,1 /tmp/rank-file.in >/tmp/rank-forceread-key.out
 cmp /tmp/rank-forceread-key.out /tmp/rank-file.want
 
+: > /tmp/rank-parallel.in
+i=400
+while test "$i" -gt 0; do
+    printf 'row-%04d %04d\n' "$((i % 37))" "$i" >> /tmp/rank-parallel.in
+    i=$((i - 1))
+done
+./rank /tmp/rank-parallel.in > /tmp/rank-parallel.want
+RANK_PARALLEL_MIN=1 RANK_DEBUG_VERIFY=1 ./rank --parallel=4 /tmp/rank-parallel.in > /tmp/rank-parallel.out
+cmp /tmp/rank-parallel.out /tmp/rank-parallel.want
+./rank -s -k2,2 /tmp/rank-parallel.in > /tmp/rank-parallel-key.want
+RANK_PARALLEL_MIN=1 RANK_DEBUG_VERIFY=1 ./rank -s -k2,2 --parallel=4 /tmp/rank-parallel.in > /tmp/rank-parallel-key.out
+cmp /tmp/rank-parallel-key.out /tmp/rank-parallel-key.want
+./rank -k1,1 -k2,2 /tmp/rank-parallel.in > /tmp/rank-parallel-multi.want
+RANK_PARALLEL_MIN=1 RANK_DEBUG_VERIFY=1 ./rank -k1,1 -k2,2 --parallel=4 /tmp/rank-parallel.in > /tmp/rank-parallel-multi.out
+cmp /tmp/rank-parallel-multi.out /tmp/rank-parallel-multi.want
+
+status=0
+./rank --parallel=0 /tmp/rank-file.in >/tmp/rank-bad-parallel.out 2>/tmp/rank-bad-parallel.err || status=$?
+test "$status" -eq 2
+grep "rank: invalid --parallel argument '0'" /tmp/rank-bad-parallel.err >/dev/null
+
 RANK_DEBUG_PLAN=1 ./rank /tmp/rank-file.in >/tmp/rank-plan.out 2>/tmp/rank-plan.err
 grep 'rank: plan=radix-bytes reason=whole-line byte radix' /tmp/rank-plan.err >/dev/null
 cmp /tmp/rank-plan.out /tmp/rank-file.want
@@ -281,6 +302,10 @@ rm -f /tmp/rank-version.out /tmp/rank-help.out /tmp/rank-bad.out /tmp/rank-bad.e
     /tmp/rank-file.want /tmp/rank-stats.out /tmp/rank-stats.err /tmp/rank-missing.out \
     /tmp/rank-missing.err /tmp/rank-verify.out /tmp/rank-after-operand.out \
     /tmp/rank-forceread.out /tmp/rank-forceread-key.out \
+    /tmp/rank-parallel.in /tmp/rank-parallel.out /tmp/rank-parallel.want \
+    /tmp/rank-parallel-key.out /tmp/rank-parallel-key.want \
+    /tmp/rank-parallel-multi.out /tmp/rank-parallel-multi.want \
+    /tmp/rank-bad-parallel.out /tmp/rank-bad-parallel.err \
     /tmp/rank-plan.out /tmp/rank-plan.err /tmp/rank-plan-cutf8.out \
     /tmp/rank-plan-cutf8.err /tmp/rank-plan-cutf8-key.out \
     /tmp/rank-plan-cutf8-key.err /tmp/rank-plan-fold.out \

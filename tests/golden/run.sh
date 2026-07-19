@@ -250,6 +250,9 @@ run_case key-blanks 'x   b\ny   a\n' -b -k2,2
 run_case key-blanks-late 'x   b\ny   a\n' -k2,2 -b
 run_case obsolete-key 'b 1\na 2\n' +1
 run_case obsolete-key-range 'z 2\na 1\n' +0 -1
+run_case parallel-default 'd\nb\na\nc\n' --parallel=2
+run_case parallel-keyed 'x 2\ny 1\nz 3\n' --parallel=2 -k2,2
+run_case parallel-reverse 'a\nc\nb\n' --parallel=2 -r
 run_case random-seeded 'delta\nalpha\nbravo\ncharlie\necho\nfox\n' -R --random-source=tests/fixtures/random/seed-a.bin
 run_case random-seeded-b 'delta\nalpha\nbravo\ncharlie\necho\nfox\n' -R --random-source=tests/fixtures/random/seed-b.bin
 run_case random-seeded-reverse 'delta\nalpha\nbravo\ncharlie\n' -R -r --random-source=tests/fixtures/random/seed-a.bin

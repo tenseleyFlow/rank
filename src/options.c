@@ -19,6 +19,7 @@ static int set_sort_mode(struct rank_options *options, const char *text);
 static int set_check_mode(struct rank_options *options, const char *text);
 static int set_buffer_size(struct rank_options *options, const char *text);
 static int set_batch_size(struct rank_options *options, const char *text);
+static int set_parallel(struct rank_options *options, const char *text);
 static void debug_dump_keys(const struct rank_options *options);
 static bool obsolete_key_start(const char *arg);
 static bool obsolete_key_end(const char *arg);
@@ -54,6 +55,7 @@ rank_options_init(struct rank_options *options, const char *argv0)
     options->temporary_dir_cap = 0;
     options->batch_size = 0;
     options->has_batch_size = false;
+    options->parallel = 1;
     options->compress_program = NULL;
     options->keys = NULL;
     options->key_count = 0;
@@ -288,6 +290,22 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
         }
         if (strncmp(arg, "--batch-size=", 13) == 0) {
             if (set_batch_size(options, arg + 13) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strcmp(arg, "--parallel") == 0) {
+            if (i + 1 == argc) {
+                rank_diag(options, "option '--parallel' requires an argument");
+                return RANK_EXIT_SERIOUS;
+            }
+            if (set_parallel(options, argv[++i]) != RANK_OPTIONS_OK) {
+                return RANK_EXIT_SERIOUS;
+            }
+            continue;
+        }
+        if (strncmp(arg, "--parallel=", 11) == 0) {
+            if (set_parallel(options, arg + 11) != RANK_OPTIONS_OK) {
                 return RANK_EXIT_SERIOUS;
             }
             continue;
@@ -562,6 +580,7 @@ rank_options_print_help(FILE *stream)
     fprintf(stream, "  -S, --buffer-size=SIZE  use SIZE for main memory buffer\n");
     fprintf(stream, "  -T, --temporary-directory=DIR  use DIR for temporaries\n");
     fprintf(stream, "      --batch-size=NMERGE  merge at most NMERGE inputs at once\n");
+    fprintf(stream, "      --parallel=N  use up to N concurrent workers for sorting\n");
     fprintf(stream, "      --compress-program=PROG  compress temporary runs with PROG\n");
 }
 
@@ -704,6 +723,22 @@ set_buffer_size(struct rank_options *options, const char *text)
     }
     options->buffer_size = (size_t)value;
     options->has_buffer_size = true;
+    return RANK_OPTIONS_OK;
+}
+
+static int
+set_parallel(struct rank_options *options, const char *text)
+{
+    char *endptr;
+    unsigned long value;
+
+    errno = 0;
+    value = strtoul(text, &endptr, 10);
+    if (endptr == text || *endptr != '\0' || errno == ERANGE || value == 0 || value > (unsigned long)SIZE_MAX) {
+        rank_diagf(options, "invalid --parallel argument '%s'", text);
+        return RANK_EXIT_SERIOUS;
+    }
+    options->parallel = (size_t)value;
     return RANK_OPTIONS_OK;
 }
 

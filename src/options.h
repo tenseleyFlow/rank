@@ -48,6 +48,7 @@ struct rank_options {
     size_t temporary_dir_cap;
     size_t batch_size;
     bool has_batch_size;
+    size_t parallel;
     const char *compress_program;
     struct rank_keydef *keys;
     size_t key_count;

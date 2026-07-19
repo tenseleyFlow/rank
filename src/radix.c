@@ -1,5 +1,6 @@
 #include "radix.h"
 
+#include "sys/thread.h"
 #include "util.h"
 
 #include <stdbool.h>
@@ -12,7 +13,21 @@ enum {
     RADIX_BUCKETS = 257,
     RADIX_INSERTION_THRESHOLD = 24,
     RADIX_DEPTH_LIMIT = 4096,
-    KEY_RADIX_INSERTION_THRESHOLD = 48
+    KEY_RADIX_INSERTION_THRESHOLD = 48,
+    RADIX_PARALLEL_MIN_LINES = 65536
+};
+
+/* Top-level bucket ranges handed to worker threads: disjoint, so the
+   sorted result is identical regardless of scheduling. */
+struct radix_child {
+    size_t lo;
+    size_t hi;
+    size_t depth;
+};
+
+struct radix_children {
+    struct radix_child items[RADIX_BUCKETS];
+    size_t count;
 };
 
 struct rank_radix_line {
@@ -25,13 +40,17 @@ struct rank_radix_context {
     struct rank_radix_stats *stats;
 };
 
-static void radix_range(struct rank_radix_line *items, size_t lo, size_t hi, size_t depth, struct rank_radix_context *ctx);
+static void radix_range(struct rank_radix_line *items, size_t lo, size_t hi, size_t depth, struct rank_radix_context *ctx, struct radix_children *emit);
 static void insertion_range(struct rank_radix_line *items, size_t lo, size_t hi, size_t depth, const struct rank_radix_context *ctx);
+static size_t radix_parallel_threads(size_t requested, size_t line_count);
+static void radix_line_task(void *arg, size_t index);
+static void key_radix_task(void *arg, size_t index);
+static void sum_stats(struct rank_radix_stats *total, const struct rank_radix_stats *parts, size_t count);
 static int compare_from_depth(const struct rank_radix_line *a, const struct rank_radix_line *b, size_t depth, const struct rank_radix_context *ctx);
 static size_t line_bucket(const struct rank_radix_line *line, size_t depth, const struct rank_radix_context *ctx);
 static size_t skip_common_prefix_lcp(struct rank_radix_line *items, size_t lo, size_t hi, size_t depth, struct rank_radix_context *ctx);
 static void swap_lines(struct rank_radix_line *a, struct rank_radix_line *b);
-static void key_radix_range(struct rank_lines *lines, const struct rank_options *options, struct rank_line *items, struct rank_line *aux, size_t lo, size_t hi, size_t key_id, size_t depth, struct rank_radix_stats *stats);
+static void key_radix_range(struct rank_lines *lines, const struct rank_options *options, struct rank_line *items, struct rank_line *aux, size_t lo, size_t hi, size_t key_id, size_t depth, struct rank_radix_stats *stats, struct radix_children *emit);
 static void key_insertion_range(struct rank_lines *lines, const struct rank_options *options, struct rank_line *items, size_t lo, size_t hi, size_t key_id, size_t depth);
 static int compare_key_from_depth(const struct rank_lines *lines, const struct rank_options *options, const struct rank_line *a, const struct rank_line *b, size_t key_id, size_t depth);
 static size_t key_bucket(const struct rank_lines *lines, const struct rank_line *line, size_t key_id, size_t depth);
@@ -61,11 +80,27 @@ static bool transformed_line_same(const struct rank_lines *lines, const struct r
 static void sort_transformed_line_equal_groups_original(struct rank_lines *lines, struct rank_line *aux);
 static void compact_transformed_line_groups(struct rank_lines *lines);
 
+struct radix_line_parallel {
+    struct rank_radix_line *items;
+    const unsigned char *base;
+    const struct radix_children *children;
+    struct rank_radix_stats *parts;
+};
+
+struct key_radix_parallel {
+    struct rank_lines *lines;
+    const struct rank_options *options;
+    struct rank_line *aux;
+    const struct radix_children *children;
+    struct rank_radix_stats *parts;
+};
+
 bool
-rank_radix_sort_lines(struct rank_lines *lines, struct rank_radix_stats *stats)
+rank_radix_sort_lines(struct rank_lines *lines, const struct rank_options *options, struct rank_radix_stats *stats)
 {
     struct rank_radix_line *items;
     struct rank_radix_context ctx;
+    size_t threads;
     size_t i;
 
     if (stats != NULL) {
@@ -88,7 +123,30 @@ rank_radix_sort_lines(struct rank_lines *lines, struct rank_radix_stats *stats)
         items[i].len = (uint32_t)lines->items[i].len;
     }
 
-    radix_range(items, 0, lines->len, 0, &ctx);
+    threads = radix_parallel_threads(options != NULL ? options->parallel : 1, lines->len);
+    if (threads > 1) {
+        struct radix_children children;
+
+        children.count = 0;
+        radix_range(items, 0, lines->len, 0, &ctx, &children);
+        if (children.count > 0) {
+            struct rank_radix_stats *parts = rank_xmalloc(children.count * sizeof(parts[0]));
+            struct radix_line_parallel pctx;
+
+            memset(parts, 0, children.count * sizeof(parts[0]));
+            pctx.items = items;
+            pctx.base = lines->data;
+            pctx.children = &children;
+            pctx.parts = parts;
+            rank_run_tasks(radix_line_task, &pctx, children.count, threads);
+            if (stats != NULL) {
+                sum_stats(stats, parts, children.count);
+            }
+            free(parts);
+        }
+    } else {
+        radix_range(items, 0, lines->len, 0, &ctx, NULL);
+    }
     for (i = 0; i < lines->len; i++) {
         lines->items[i].off = items[i].off;
         lines->items[i].len = items[i].len;
@@ -102,6 +160,7 @@ bool
 rank_radix_sort_key(struct rank_lines *lines, const struct rank_options *options, struct rank_radix_stats *stats)
 {
     struct rank_line *aux;
+    size_t threads;
 
     if (stats != NULL) {
         stats->passes = 0;
@@ -116,7 +175,31 @@ rank_radix_sort_key(struct rank_lines *lines, const struct rank_options *options
     }
 
     aux = rank_xmalloc(lines->len * sizeof(aux[0]));
-    key_radix_range(lines, options, lines->items, aux, 0, lines->len, 0, 0, stats);
+    threads = radix_parallel_threads(options->parallel, lines->len);
+    if (threads > 1) {
+        struct radix_children children;
+
+        children.count = 0;
+        key_radix_range(lines, options, lines->items, aux, 0, lines->len, 0, 0, stats, &children);
+        if (children.count > 0) {
+            struct rank_radix_stats *parts = rank_xmalloc(children.count * sizeof(parts[0]));
+            struct key_radix_parallel pctx;
+
+            memset(parts, 0, children.count * sizeof(parts[0]));
+            pctx.lines = lines;
+            pctx.options = options;
+            pctx.aux = aux;
+            pctx.children = &children;
+            pctx.parts = parts;
+            rank_run_tasks(key_radix_task, &pctx, children.count, threads);
+            if (stats != NULL) {
+                sum_stats(stats, parts, children.count);
+            }
+            free(parts);
+        }
+    } else {
+        key_radix_range(lines, options, lines->items, aux, 0, lines->len, 0, 0, stats, NULL);
+    }
     if (options->key_count > 1) {
         sort_next_key_groups(lines, options, aux, 0, lines->len, 0);
     } else if (!options->stable && !options->unique) {
@@ -208,7 +291,7 @@ rank_radix_sort_transformed_key(struct rank_lines *lines, const struct rank_opti
 }
 
 static void
-radix_range(struct rank_radix_line *items, size_t lo, size_t hi, size_t depth, struct rank_radix_context *ctx)
+radix_range(struct rank_radix_line *items, size_t lo, size_t hi, size_t depth, struct rank_radix_context *ctx, struct radix_children *emit)
 {
     size_t counts[RADIX_BUCKETS] = {0};
     size_t starts[RADIX_BUCKETS];
@@ -293,7 +376,14 @@ radix_range(struct rank_radix_line *items, size_t lo, size_t hi, size_t depth, s
         size_t end = start + counts[b];
 
         if (end - start > 1) {
-            radix_range(items, start, end, depth + 1U, ctx);
+            if (emit != NULL) {
+                emit->items[emit->count].lo = start;
+                emit->items[emit->count].hi = end;
+                emit->items[emit->count].depth = depth + 1U;
+                emit->count++;
+            } else {
+                radix_range(items, start, end, depth + 1U, ctx, NULL);
+            }
         }
     }
 }
@@ -370,6 +460,57 @@ swap_lines(struct rank_radix_line *a, struct rank_radix_line *b)
 }
 
 static size_t
+radix_parallel_threads(size_t requested, size_t line_count)
+{
+    const char *env = getenv("RANK_PARALLEL_MIN");
+    size_t min_lines = RADIX_PARALLEL_MIN_LINES;
+
+    if (env != NULL && env[0] != '\0') {
+        min_lines = (size_t)strtoul(env, NULL, 10);
+    }
+    if (requested <= 1 || line_count < min_lines) {
+        return 1;
+    }
+    return requested;
+}
+
+static void
+radix_line_task(void *arg, size_t index)
+{
+    struct radix_line_parallel *p = arg;
+    const struct radix_child *child = &p->children->items[index];
+    struct rank_radix_context ctx;
+
+    ctx.base = p->base;
+    ctx.stats = &p->parts[index];
+    radix_range(p->items, child->lo, child->hi, child->depth, &ctx, NULL);
+}
+
+static void
+key_radix_task(void *arg, size_t index)
+{
+    struct key_radix_parallel *p = arg;
+    const struct radix_child *child = &p->children->items[index];
+
+    key_radix_range(p->lines, p->options, p->lines->items, p->aux, child->lo, child->hi, 0, child->depth, &p->parts[index], NULL);
+}
+
+static void
+sum_stats(struct rank_radix_stats *total, const struct rank_radix_stats *parts, size_t count)
+{
+    size_t i;
+
+    if (total == NULL) {
+        return;
+    }
+    for (i = 0; i < count; i++) {
+        total->passes += parts[i].passes;
+        total->classified += parts[i].classified;
+        total->insertion_sorts += parts[i].insertion_sorts;
+    }
+}
+
+static size_t
 skip_common_prefix_lcp(struct rank_radix_line *items, size_t lo, size_t hi, size_t depth, struct rank_radix_context *ctx)
 {
     const struct rank_radix_line *first = &items[lo];
@@ -412,7 +553,7 @@ skip_common_prefix_lcp(struct rank_radix_line *items, size_t lo, size_t hi, size
 }
 
 static void
-key_radix_range(struct rank_lines *lines, const struct rank_options *options, struct rank_line *items, struct rank_line *aux, size_t lo, size_t hi, size_t key_id, size_t depth, struct rank_radix_stats *stats)
+key_radix_range(struct rank_lines *lines, const struct rank_options *options, struct rank_line *items, struct rank_line *aux, size_t lo, size_t hi, size_t key_id, size_t depth, struct rank_radix_stats *stats, struct radix_children *emit)
 {
     size_t counts[RADIX_BUCKETS] = {0};
     size_t starts[RADIX_BUCKETS];
@@ -464,7 +605,14 @@ key_radix_range(struct rank_lines *lines, const struct rank_options *options, st
         size_t end = start + counts[b];
 
         if (end - start > 1) {
-            key_radix_range(lines, options, items, aux, start, end, key_id, depth + 1U, stats);
+            if (emit != NULL) {
+                emit->items[emit->count].lo = start;
+                emit->items[emit->count].hi = end;
+                emit->items[emit->count].depth = depth + 1U;
+                emit->count++;
+            } else {
+                key_radix_range(lines, options, items, aux, start, end, key_id, depth + 1U, stats, NULL);
+            }
         }
     }
 }
@@ -681,7 +829,7 @@ sort_next_key_groups(struct rank_lines *lines, const struct rank_options *option
         }
         if (i - start > 1) {
             if (!maybe_use_key_range_monotonic(lines, options, lines->items, start, i, next_key)) {
-                key_radix_range(lines, options, lines->items, aux, start, i, next_key, 0, NULL);
+                key_radix_range(lines, options, lines->items, aux, start, i, next_key, 0, NULL, NULL);
             }
             if (next_key + 1U < options->key_count) {
                 sort_next_key_groups(lines, options, aux, start, i, next_key);

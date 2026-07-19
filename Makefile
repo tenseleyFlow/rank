@@ -19,15 +19,17 @@ SRC = \
 	src/util.c \
 	src/sys/file.c \
 	src/sys/cpu.c \
-	src/sys/scan.c
+	src/sys/scan.c \
+	src/sys/thread.c
 
 OBJ = $(SRC:.c=.o)
 DEP = $(OBJ:.o=.d)
 
 CPPFLAGS += -I. -Isrc -D_DEFAULT_SOURCE
 CFLAGS ?= -O2
-CFLAGS += -std=c11 -Wall -Wextra -Werror -Wpedantic -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wconversion
+CFLAGS += -std=c11 -pthread -Wall -Wextra -Werror -Wpedantic -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wconversion
 LDFLAGS ?=
+LDFLAGS += -pthread
 
 .PHONY: all check unit golden perf-smoke sanitize clean distclean ref-sort
 

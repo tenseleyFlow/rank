@@ -36,7 +36,7 @@ rank_sort_lines(struct rank_lines *lines, const struct rank_options *options, co
                 fprintf(stderr, "rank: radix presorted=1\n");
             }
         } else {
-            ok = rank_radix_sort_lines(lines, &stats);
+            ok = rank_radix_sort_lines(lines, options, &stats);
             if (!ok) {
                 return scalar_sort_lines(lines, options);
             }
