@@ -31,7 +31,9 @@ CFLAGS += -std=c11 -pthread -Wall -Wextra -Werror -Wpedantic -Wshadow -Wstrict-p
 LDFLAGS ?=
 LDFLAGS += -pthread
 
-.PHONY: all check unit golden fuzz fuzz-smoke perf-smoke sanitize clean distclean ref-sort
+VERSION := $(shell sed -n 's/.*RANK_VERSION "\(.*\)".*/\1/p' configure)
+
+.PHONY: all check unit golden fuzz fuzz-smoke perf-smoke sanitize clean distclean ref-sort dist distcheck install
 
 all: rank
 
@@ -67,6 +69,24 @@ sanitize:
 
 ref-sort:
 	sh scripts/build-gnu-sort.sh
+
+PREFIX ?= /usr/local
+
+install: rank
+	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(PREFIX)/share/man/man1
+	install -m 755 rank $(DESTDIR)$(PREFIX)/bin/rank
+	install -m 644 doc/rank.1 $(DESTDIR)$(PREFIX)/share/man/man1/rank.1
+
+dist:
+	git archive --format=tar.gz --prefix=rank-$(VERSION)/ -o rank-$(VERSION).tar.gz HEAD
+
+distcheck: dist
+	rm -rf build/distcheck
+	mkdir -p build/distcheck
+	tar -xzf rank-$(VERSION).tar.gz -C build/distcheck
+	cd build/distcheck/rank-$(VERSION) && ./configure && $(MAKE) && sh tests/unit/run.sh
+	rm -rf build/distcheck
+	@printf 'distcheck ok: rank-$(VERSION).tar.gz\n'
 
 clean:
 	rm -f rank $(OBJ) $(DEP)

@@ -1,0 +1,27 @@
+# Maintainer: Matthew Wolffe <mfwolffe@outlook.com>
+pkgname=rank
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Drop-in GNU sort replacement built on MSD radix sorting"
+arch=('x86_64' 'aarch64')
+url="https://github.com/tenseleyFlow/rank"
+license=('MIT')
+depends=('glibc')
+source=("$url/releases/download/v$pkgver/rank-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "rank-$pkgver"
+    ./configure
+    make
+}
+
+check() {
+    cd "rank-$pkgver"
+    sh tests/unit/run.sh
+}
+
+package() {
+    cd "rank-$pkgver"
+    make DESTDIR="$pkgdir" PREFIX=/usr install
+}
