@@ -547,6 +547,35 @@ mode_set_compatible(const struct rank_options *options, unsigned int mode_flags,
     return false;
 }
 
+/* GNU inheritance: a key with no ordering options of its own -- no
+   mode, no b/d/f/i, no r -- takes every global ordering option,
+   including reverse. A key with any option takes nothing. The global
+   reverse additionally flips only the keyless comparison and the
+   keyed last resort. */
+void
+rank_options_apply_key_defaults(struct rank_options *options)
+{
+    size_t i;
+
+    for (i = 0; i < options->key_count; i++) {
+        struct rank_keydef *key = &options->keys[i];
+
+        if (key->sort_mode != RANK_SORT_BYTE || key->mode_flags != 0
+            || key->ignore_case || key->dictionary_order || key->ignore_nonprinting
+            || key->ignore_start_blanks || key->ignore_end_blanks || key->reverse) {
+            continue;
+        }
+        key->sort_mode = options->sort_mode;
+        key->mode_flags = options->mode_flags;
+        key->ignore_case = options->ignore_case;
+        key->dictionary_order = options->dictionary_order;
+        key->ignore_nonprinting = options->ignore_nonprinting;
+        key->ignore_start_blanks = options->ignore_leading_blanks;
+        key->ignore_end_blanks = options->ignore_leading_blanks;
+        key->reverse = options->reverse;
+    }
+}
+
 int
 rank_options_check_ordering(const struct rank_options *options)
 {

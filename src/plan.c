@@ -24,9 +24,11 @@ rank_plan_from_options(const struct rank_options *options)
         plan.reason = "debug output";
         return plan;
     }
-    if (has_text_modifiers(options)) {
+    if (has_text_modifiers(options) || (options->key_count == 0 && options->ignore_leading_blanks)) {
         if (rank_locale_collation_identity() && options->sort_mode == RANK_SORT_BYTE) {
-            if (options->key_count == 0) {
+            /* Output reversal would flip stable input order inside
+               equal-filtered groups, which hold distinct lines. */
+            if (options->key_count == 0 && !(options->reverse && options->stable)) {
                 plan.kind = RANK_PLAN_RADIX_TRANSFORMED;
                 plan.reason = "whole-line filtered radix";
                 return plan;

@@ -2,6 +2,7 @@
 
 #include "rank_locale.h"
 #include "numeric.h"
+#include "sys/scan.h"
 
 #include <string.h>
 
@@ -43,8 +44,22 @@ rank_compare_lines_ascending(struct rank_cmp_context *ctx, const struct rank_lin
         return rank_month_compare_values(rank_line_month(ctx->lines, a), rank_line_month(ctx->lines, b));
     }
     if (ctx->options->sort_mode == RANK_SORT_VERSION) {
+        const unsigned char *a_text = a->text;
+        const unsigned char *b_text = b->text;
+        size_t a_len = a->len;
+        size_t b_len = b->len;
+
         ctx->calls++;
-        return rank_version_compare(a->text, a->len, b->text, b->len);
+        if (ctx->options->ignore_leading_blanks) {
+            size_t skip = rank_scan_nonblank(a_text, a_len);
+
+            a_text += skip;
+            a_len -= skip;
+            skip = rank_scan_nonblank(b_text, b_len);
+            b_text += skip;
+            b_len -= skip;
+        }
+        return rank_version_compare(a_text, a_len, b_text, b_len);
     }
     if (ctx->options->sort_mode == RANK_SORT_RANDOM) {
         int result;
@@ -71,17 +86,29 @@ rank_compare_lines_ascending(struct rank_cmp_context *ctx, const struct rank_lin
 int
 rank_compare_lines(struct rank_cmp_context *ctx, const struct rank_line *a, const struct rank_line *b)
 {
-    int result = compare_keys(ctx, a, b);
+    int result;
 
     if (ctx->options->key_count == 0) {
         result = rank_compare_lines_ascending(ctx, a, b);
-        if (result == 0 && ctx->options->sort_mode != RANK_SORT_BYTE && !(ctx->options->stable || ctx->options->unique)) {
+        if (result == 0
+            && (ctx->options->sort_mode != RANK_SORT_BYTE || ctx->options->ignore_case || ctx->options->dictionary_order || ctx->options->ignore_nonprinting || ctx->options->ignore_leading_blanks)
+            && !(ctx->options->stable || ctx->options->unique)) {
             result = compare_spans(ctx, a->text, a->len, b->text, b->len, RANK_SORT_BYTE);
         }
-    } else if (result == 0 && !(ctx->options->stable || ctx->options->unique)) {
-        result = compare_lines_last_resort(ctx, a, b);
+        if (ctx->options->reverse) {
+            result = -result;
+        }
+        return result;
     }
 
+    /* GNU applies the global reverse only to the last resort when keys
+       exist; key ordering reverses solely through per-key r, which
+       inheritance already resolved. */
+    result = compare_keys(ctx, a, b);
+    if (result != 0 || ctx->options->stable || ctx->options->unique) {
+        return result;
+    }
+    result = compare_lines_last_resort(ctx, a, b);
     if (ctx->options->reverse) {
         result = -result;
     }
@@ -122,7 +149,7 @@ compare_keys(struct rank_cmp_context *ctx, const struct rank_line *a, const stru
     for (i = 0; i < ctx->options->key_count; i++) {
         const struct rank_key_span *a_key = rank_line_key_span(ctx->lines, a, i);
         const struct rank_key_span *b_key = rank_line_key_span(ctx->lines, b, i);
-        enum rank_sort_mode mode = ctx->options->keys[i].sort_mode == RANK_SORT_BYTE ? ctx->options->sort_mode : ctx->options->keys[i].sort_mode;
+        enum rank_sort_mode mode = ctx->options->keys[i].sort_mode;
         int result;
 
         if (mode == RANK_SORT_NUMERIC) {
@@ -172,11 +199,21 @@ compare_keys(struct rank_cmp_context *ctx, const struct rank_line *a, const stru
 static int
 compare_modified_spans(struct rank_cmp_context *ctx, const unsigned char *a, size_t a_len, const unsigned char *b, size_t b_len, const struct rank_keydef *key)
 {
-    bool ignore_case = ctx->options->ignore_case || (key != NULL && key->ignore_case);
-    bool dictionary_order = ctx->options->dictionary_order || (key != NULL && key->dictionary_order);
-    bool ignore_nonprinting = ctx->options->ignore_nonprinting || (key != NULL && key->ignore_nonprinting);
+    bool ignore_case = key != NULL ? key->ignore_case : ctx->options->ignore_case;
+    bool dictionary_order = key != NULL ? key->dictionary_order : ctx->options->dictionary_order;
+    bool ignore_nonprinting = key != NULL ? key->ignore_nonprinting : ctx->options->ignore_nonprinting;
     size_t a_pos = 0;
     size_t b_pos = 0;
+
+    if (key == NULL && ctx->options->key_count == 0 && ctx->options->ignore_leading_blanks) {
+        size_t skip = rank_scan_nonblank(a, a_len);
+
+        a += skip;
+        a_len -= skip;
+        skip = rank_scan_nonblank(b, b_len);
+        b += skip;
+        b_len -= skip;
+    }
 
     if (!ignore_case && !dictionary_order && !ignore_nonprinting) {
         return compare_spans(ctx, a, a_len, b, b_len, RANK_SORT_BYTE);

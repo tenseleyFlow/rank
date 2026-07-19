@@ -149,7 +149,7 @@ merge_fast_mode(const struct rank_options *options)
         case RANK_SORT_MONTH:
             return MERGE_FAST_MONTH;
         case RANK_SORT_VERSION:
-            return MERGE_FAST_VERSION;
+            return options->ignore_leading_blanks ? MERGE_FAST_NONE : MERGE_FAST_VERSION;
         default:
             return MERGE_FAST_NONE;
         }
@@ -161,10 +161,10 @@ merge_fast_mode(const struct rank_options *options)
     if (!(key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char)) {
         return MERGE_FAST_NONE;
     }
-    if (options->has_field_separator && (options->ignore_leading_blanks || key->ignore_start_blanks || key->ignore_end_blanks)) {
+    if (options->has_field_separator && (key->ignore_start_blanks || key->ignore_end_blanks)) {
         return MERGE_FAST_NONE;
     }
-    mode = key->sort_mode != RANK_SORT_BYTE ? key->sort_mode : options->sort_mode;
+    mode = key->sort_mode;
     switch (mode) {
     case RANK_SORT_NUMERIC:
         return MERGE_FAST_KEY_NUMERIC;
@@ -177,8 +177,7 @@ merge_fast_mode(const struct rank_options *options)
     case RANK_SORT_VERSION:
         return MERGE_FAST_KEY_VERSION;
     case RANK_SORT_BYTE:
-        if (options->ignore_case || options->dictionary_order || options->ignore_nonprinting
-            || key->ignore_case || key->dictionary_order || key->ignore_nonprinting) {
+        if (key->ignore_case || key->dictionary_order || key->ignore_nonprinting) {
             return MERGE_FAST_NONE;
         }
         return MERGE_FAST_KEY_BYTE;
@@ -384,15 +383,25 @@ merge_fast_run_less(const struct rank_lines *lines, const struct rank_options *o
         if (options->keys[0].reverse) {
             result = -result;
         }
-    }
-    if (result == 0 && !(options->stable || options->unique)) {
-        const struct rank_line *aline = &lines->items[runs[a].pos];
-        const struct rank_line *bline = &lines->items[runs[b].pos];
+        if (result == 0 && !(options->stable || options->unique)) {
+            const struct rank_line *aline = &lines->items[runs[a].pos];
+            const struct rank_line *bline = &lines->items[runs[b].pos];
 
-        result = merge_compare_bytes(aline->text, aline->len, bline->text, bline->len);
-    }
-    if (options->reverse) {
-        result = -result;
+            result = merge_compare_bytes(aline->text, aline->len, bline->text, bline->len);
+            if (options->reverse) {
+                result = -result;
+            }
+        }
+    } else {
+        if (result == 0 && !(options->stable || options->unique)) {
+            const struct rank_line *aline = &lines->items[runs[a].pos];
+            const struct rank_line *bline = &lines->items[runs[b].pos];
+
+            result = merge_compare_bytes(aline->text, aline->len, bline->text, bline->len);
+        }
+        if (options->reverse) {
+            result = -result;
+        }
     }
     if (result != 0) {
         return result < 0;
@@ -501,6 +510,8 @@ static bool
 merge_can_stream_bytes(const struct rank_options *options)
 {
     return options->key_count == 0 && options->sort_mode == RANK_SORT_BYTE && !options->debug
+        && !options->ignore_case && !options->dictionary_order && !options->ignore_nonprinting
+        && !options->ignore_leading_blanks
         && rank_locale_collation_identity();
 }
 

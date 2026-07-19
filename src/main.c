@@ -47,6 +47,7 @@ main(int argc, char **argv)
         free_options(&options);
         return RANK_EXIT_SERIOUS;
     }
+    rank_options_apply_key_defaults(&options);
     if (!rank_check_options_valid(&options)) {
         free_options(&options);
         return RANK_EXIT_SERIOUS;

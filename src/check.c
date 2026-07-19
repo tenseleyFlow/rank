@@ -248,7 +248,8 @@ check_fast_kind_from_options(const struct rank_options *options, enum rank_sort_
     }
     if (options->key_count == 0) {
         if (options->sort_mode == RANK_SORT_BYTE
-            && !options->ignore_case && !options->dictionary_order && !options->ignore_nonprinting) {
+            && !options->ignore_case && !options->dictionary_order && !options->ignore_nonprinting
+            && !options->ignore_leading_blanks) {
             return CHECK_FAST_BYTES;
         }
         return CHECK_FAST_NONE;
@@ -260,14 +261,13 @@ check_fast_kind_from_options(const struct rank_options *options, enum rank_sort_
     if (!(key->start_field > 0 && !key->has_start_char && key->has_end && key->end_field == key->start_field && !key->has_end_char)) {
         return CHECK_FAST_NONE;
     }
-    if (options->has_field_separator && (options->ignore_leading_blanks || key->ignore_start_blanks || key->ignore_end_blanks)) {
+    if (options->has_field_separator && (key->ignore_start_blanks || key->ignore_end_blanks)) {
         return CHECK_FAST_NONE;
     }
-    mode = key->sort_mode != RANK_SORT_BYTE ? key->sort_mode : options->sort_mode;
+    mode = key->sort_mode;
     switch (mode) {
     case RANK_SORT_BYTE:
-        if (options->ignore_case || options->dictionary_order || options->ignore_nonprinting
-            || key->ignore_case || key->dictionary_order || key->ignore_nonprinting) {
+        if (key->ignore_case || key->dictionary_order || key->ignore_nonprinting) {
             return CHECK_FAST_NONE;
         }
         break;
@@ -348,9 +348,9 @@ check_key_records_disordered(const struct rank_options *options, struct check_co
     key_equal = result == 0;
     if (result == 0 && !(options->stable || options->unique)) {
         result = check_compare_bytes(previous->data, previous->len, current->data, current->len);
-    }
-    if (options->reverse) {
-        result = -result;
+        if (options->reverse) {
+            result = -result;
+        }
     }
     compare->prev_key = cur;
     return result > 0 || (options->unique && key_equal);

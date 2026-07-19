@@ -166,6 +166,18 @@ run_case ignore-case-last-resort 'a\nA\nb\nB\n' -f
 run_case ignore-case-reverse 'a\nA\nb\nB\n' -fr
 run_case ignore-case-unique 'a\nA\nb\nB\n' -fu
 run_case ignore-case-reverse-unique 'a\nA\nb\nB\n' -fru
+run_case ignore-case-reverse-stable 'a\nA\nb\nB\n' -frs
+run_case dictionary-reverse-stable-blanks 'a-b\nab\n  zz\nzz\n' -d -r -s -b
+run_case blanks-keyless '  b\na\n' -b
+run_case blanks-keyless-unique '  a\na\nb\n' -u -b
+run_case blanks-keyless-reverse-stable '  b\nb\na\n' -b -r -s
+run_case nonprinting-unique-blanks 'a\001b\nab\n  ab\n' -i -u -b
+run_case version-keyless-blanks '  v1.10\nv1.2\n  v1.0\n' -V -b
+run_case sep-key-blanks 'x,  b\ny, a\n' -t, -k2b,2
+run_case sep-key-end-blanks 'x,  b\ny, a\n' -t, -k2,2b
+run_case sep-key-blanks-char 'x,  ab\ny, xa\n' -t, -k2.2b,2
+run_case key-reverse-nonstable-numeric 'b 1\na 1\nc 2\n' -r -k2,2n
+run_case key-blanks-reverse 'x   b\ny   a\n' -b -k2,2r
 run_case ignore-case-reverse-unique-upper-first 'A\na\nB\nb\n' -fru
 run_case dictionary-reverse-unique 'a-b\nab\na b\naa\n' -dru
 run_case nonprinting-reverse-unique 'a\001b\nab\na\177b\naa\n' -iru

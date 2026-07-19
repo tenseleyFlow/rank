@@ -31,7 +31,7 @@ static int compare_data_spans(const unsigned char *a, size_t a_len, const unsign
 static void finalize_pointers(struct rank_lines *lines);
 static struct rank_key_span extract_key_span(const struct rank_line *line, const struct rank_options *options, const struct rank_keydef *key);
 static struct rank_key_span extract_explicit_key_span_cached(const struct rank_line *line, const struct rank_keydef *key, const size_t *field_starts, const size_t *field_ends);
-static struct rank_key_span extract_blank_key_span_cached(const struct rank_line *line, const struct rank_options *options, const struct rank_keydef *key, const size_t *blank_starts, const size_t *text_starts, const size_t *field_ends);
+static struct rank_key_span extract_blank_key_span_cached(const struct rank_line *line, const struct rank_keydef *key, const size_t *blank_starts, const size_t *text_starts, const size_t *field_ends);
 static size_t max_blank_key_field(const struct rank_options *options);
 static size_t max_explicit_key_field(const struct rank_options *options);
 static void fill_explicit_field_cache(const struct rank_line *line, unsigned char sep, size_t max_field, size_t *field_starts, size_t *field_ends);
@@ -47,7 +47,7 @@ static void finalize_transform_pointers(struct rank_lines *lines, const struct r
 static bool transform_has_nul(const unsigned char *text, size_t len);
 static bool reserve_transform_data(struct rank_lines *lines, size_t needed);
 static bool global_text_modifier(const struct rank_options *options);
-static bool key_text_modifier(const struct rank_options *options, const struct rank_keydef *key);
+static bool key_text_modifier(const struct rank_keydef *key);
 static bool filtered_keep(unsigned char byte, bool dictionary_order, bool ignore_nonprinting);
 static unsigned char filtered_fold(unsigned char byte, bool ignore_case);
 static size_t explicit_field_start(const struct rank_line *line, unsigned char sep, size_t field);
@@ -168,13 +168,13 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
     size_t *explicit_ends = NULL;
     size_t max_blank_field = 0;
     size_t max_explicit_field = 0;
-    bool want_key_numbers = options->sort_mode == RANK_SORT_NUMERIC;
-    bool want_key_general_numbers = options->sort_mode == RANK_SORT_GENERAL_NUMERIC;
-    bool want_key_human_numbers = options->sort_mode == RANK_SORT_HUMAN_NUMERIC;
-    bool want_key_months = options->sort_mode == RANK_SORT_MONTH;
-    bool want_key_random = options->sort_mode == RANK_SORT_RANDOM;
+    bool want_key_numbers = false;
+    bool want_key_general_numbers = false;
+    bool want_key_human_numbers = false;
+    bool want_key_months = false;
+    bool want_key_random = false;
     bool locale_identity = rank_locale_collation_identity();
-    bool want_line_transforms = options->sort_mode == RANK_SORT_BYTE && (!locale_identity || (locale_identity && global_text_modifier(options)));
+    bool want_line_transforms = options->sort_mode == RANK_SORT_BYTE && (!locale_identity || global_text_modifier(options) || options->ignore_leading_blanks);
     bool want_key_transforms = false;
     struct rank_md5_ctx random_base;
     unsigned char *random_scratch = NULL;
@@ -247,8 +247,8 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
         if (options->keys[k].sort_mode == RANK_SORT_RANDOM) {
             want_key_random = true;
         }
-        if ((options->keys[k].sort_mode == RANK_SORT_BYTE && options->sort_mode == RANK_SORT_BYTE)
-            && (!locale_identity || (locale_identity && key_text_modifier(options, &options->keys[k])))) {
+        if (options->keys[k].sort_mode == RANK_SORT_BYTE
+            && (!locale_identity || key_text_modifier(&options->keys[k]))) {
             want_key_transforms = true;
         }
     }
@@ -257,20 +257,6 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
     }
     if (want_key_transforms) {
         lines->key_transforms = rank_xrealloc(lines->key_transforms, lines->key_span_count * sizeof(lines->key_transforms[0]));
-    }
-    if (options->sort_mode == RANK_SORT_NUMERIC) {
-        lines->line_numbers = rank_xrealloc(lines->line_numbers, lines->len * sizeof(lines->line_numbers[0]));
-    } else if (options->sort_mode == RANK_SORT_GENERAL_NUMERIC) {
-        lines->line_general_numbers = rank_xrealloc(lines->line_general_numbers, lines->len * sizeof(lines->line_general_numbers[0]));
-    } else if (options->sort_mode == RANK_SORT_HUMAN_NUMERIC) {
-        lines->line_human_numbers = rank_xrealloc(lines->line_human_numbers, lines->len * sizeof(lines->line_human_numbers[0]));
-    } else if (options->sort_mode == RANK_SORT_MONTH) {
-        lines->line_months = rank_xrealloc(lines->line_months, lines->len * sizeof(lines->line_months[0]));
-    } else if (options->sort_mode == RANK_SORT_RANDOM) {
-        if (!random_state_from_options(options, &random_base)) {
-            return false;
-        }
-        lines->line_random = rank_xrealloc(lines->line_random, lines->len * sizeof(lines->line_random[0]));
     }
     if (want_key_numbers) {
         lines->key_numbers = rank_xrealloc(lines->key_numbers, lines->key_span_count * sizeof(lines->key_numbers[0]));
@@ -285,7 +271,7 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
         lines->key_months = rank_xrealloc(lines->key_months, lines->key_span_count * sizeof(lines->key_months[0]));
     }
     if (want_key_random) {
-        if (options->sort_mode != RANK_SORT_RANDOM && !random_state_from_options(options, &random_base)) {
+        if (!random_state_from_options(options, &random_base)) {
             return false;
         }
         lines->key_random = rank_xrealloc(lines->key_random, lines->key_span_count * sizeof(lines->key_random[0]));
@@ -306,17 +292,6 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
     }
     for (i = 0; i < lines->len; i++) {
         lines->items[i].key_index = i * options->key_count;
-        if (options->sort_mode == RANK_SORT_NUMERIC) {
-            lines->line_numbers[lines->items[i].ordinal] = rank_numeric_parse(lines->items[i].text, lines->items[i].len);
-        } else if (options->sort_mode == RANK_SORT_GENERAL_NUMERIC) {
-            lines->line_general_numbers[lines->items[i].ordinal] = rank_general_numeric_parse(lines->items[i].text, lines->items[i].len);
-        } else if (options->sort_mode == RANK_SORT_HUMAN_NUMERIC) {
-            lines->line_human_numbers[lines->items[i].ordinal] = rank_human_numeric_parse(lines->items[i].text, lines->items[i].len);
-        } else if (options->sort_mode == RANK_SORT_MONTH) {
-            lines->line_months[lines->items[i].ordinal] = rank_month_parse(lines->items[i].text, lines->items[i].len);
-        } else if (options->sort_mode == RANK_SORT_RANDOM) {
-            compute_random_digest(&random_base, options, NULL, lines->items[i].text, lines->items[i].len, &lines->line_random[lines->items[i].ordinal], &random_scratch, &random_scratch_cap);
-        }
         if (want_line_transforms && !append_transform_span(lines, lines->items[i].text, lines->items[i].len, &lines->line_transforms[lines->items[i].ordinal])) {
             return false;
         }
@@ -327,38 +302,38 @@ rank_lines_prepare_keys(struct rank_lines *lines, const struct rank_options *opt
         }
         for (k = 0; k < options->key_count; k++) {
             if (blank_starts != NULL) {
-                lines->key_spans[lines->items[i].key_index + k] = extract_blank_key_span_cached(&lines->items[i], options, &options->keys[k], blank_starts, text_starts, field_ends);
+                lines->key_spans[lines->items[i].key_index + k] = extract_blank_key_span_cached(&lines->items[i], &options->keys[k], blank_starts, text_starts, field_ends);
             } else if (explicit_starts != NULL) {
                 lines->key_spans[lines->items[i].key_index + k] = extract_explicit_key_span_cached(&lines->items[i], &options->keys[k], explicit_starts, explicit_ends);
             } else {
                 lines->key_spans[lines->items[i].key_index + k] = extract_key_span(&lines->items[i], options, &options->keys[k]);
             }
-            if (want_key_numbers && (options->sort_mode == RANK_SORT_NUMERIC || options->keys[k].sort_mode == RANK_SORT_NUMERIC)) {
+            if (want_key_numbers && options->keys[k].sort_mode == RANK_SORT_NUMERIC) {
                 const struct rank_key_span *span = &lines->key_spans[lines->items[i].key_index + k];
 
                 lines->key_numbers[lines->items[i].key_index + k] = rank_numeric_parse(span->ptr, span->len);
             }
-            if (want_key_general_numbers && (options->sort_mode == RANK_SORT_GENERAL_NUMERIC || options->keys[k].sort_mode == RANK_SORT_GENERAL_NUMERIC)) {
+            if (want_key_general_numbers && options->keys[k].sort_mode == RANK_SORT_GENERAL_NUMERIC) {
                 const struct rank_key_span *span = &lines->key_spans[lines->items[i].key_index + k];
 
                 lines->key_general_numbers[lines->items[i].key_index + k] = rank_general_numeric_parse(span->ptr, span->len);
             }
-            if (want_key_human_numbers && (options->sort_mode == RANK_SORT_HUMAN_NUMERIC || options->keys[k].sort_mode == RANK_SORT_HUMAN_NUMERIC)) {
+            if (want_key_human_numbers && options->keys[k].sort_mode == RANK_SORT_HUMAN_NUMERIC) {
                 const struct rank_key_span *span = &lines->key_spans[lines->items[i].key_index + k];
 
                 lines->key_human_numbers[lines->items[i].key_index + k] = rank_human_numeric_parse(span->ptr, span->len);
             }
-            if (want_key_months && (options->sort_mode == RANK_SORT_MONTH || options->keys[k].sort_mode == RANK_SORT_MONTH)) {
+            if (want_key_months && options->keys[k].sort_mode == RANK_SORT_MONTH) {
                 const struct rank_key_span *span = &lines->key_spans[lines->items[i].key_index + k];
 
                 lines->key_months[lines->items[i].key_index + k] = rank_month_parse(span->ptr, span->len);
             }
-            if (want_key_random && (options->sort_mode == RANK_SORT_RANDOM || options->keys[k].sort_mode == RANK_SORT_RANDOM)) {
+            if (want_key_random && options->keys[k].sort_mode == RANK_SORT_RANDOM) {
                 const struct rank_key_span *span = &lines->key_spans[lines->items[i].key_index + k];
 
                 compute_random_digest(&random_base, options, &options->keys[k], span->ptr, span->len, &lines->key_random[lines->items[i].key_index + k], &random_scratch, &random_scratch_cap);
             }
-            if (want_key_transforms && options->keys[k].sort_mode == RANK_SORT_BYTE && options->sort_mode == RANK_SORT_BYTE) {
+            if (want_key_transforms && options->keys[k].sort_mode == RANK_SORT_BYTE) {
                 const struct rank_key_span *span = &lines->key_spans[lines->items[i].key_index + k];
 
                 if (!prepare_key_transform(lines, options, &options->keys[k], lines->items[i].key_index + k, span)) {
@@ -399,11 +374,12 @@ rank_simple_key_span(const unsigned char *text, size_t len, const struct rank_op
     line.len = len;
     if (options->has_field_separator) {
         start = explicit_field_start(&line, options->field_separator, key->start_field);
+        if (key->ignore_start_blanks) {
+            start += rank_scan_nonblank(text + start, len - start);
+        }
         end = explicit_field_end(&line, options->field_separator, start);
     } else {
-        bool ignore_blanks = options->ignore_leading_blanks || key->ignore_start_blanks;
-
-        start = blank_field_start(&line, key->start_field, ignore_blanks);
+        start = blank_field_start(&line, key->start_field, key->ignore_start_blanks);
         end = blank_field_end(&line, start);
     }
     if (end < start) {
@@ -439,9 +415,19 @@ prepare_line_transforms(struct rank_lines *lines, const struct rank_options *opt
 
     lines->line_transforms = rank_xrealloc(lines->line_transforms, lines->len * sizeof(lines->line_transforms[0]));
     for (i = 0; i < lines->len; i++) {
-        bool ok = rank_locale_collation_identity() && global_text_modifier(options)
-            ? append_filtered_span(lines, lines->items[i].text, lines->items[i].len, options->ignore_case, options->dictionary_order, options->ignore_nonprinting, &lines->line_transforms[lines->items[i].ordinal])
-            : append_transform_span(lines, lines->items[i].text, lines->items[i].len, &lines->line_transforms[lines->items[i].ordinal]);
+        const unsigned char *text = lines->items[i].text;
+        size_t len = lines->items[i].len;
+        bool ok;
+
+        if (options->ignore_leading_blanks) {
+            size_t skip = rank_scan_nonblank(text, len);
+
+            text += skip;
+            len -= skip;
+        }
+        ok = rank_locale_collation_identity() && (global_text_modifier(options) || options->ignore_leading_blanks)
+            ? append_filtered_span(lines, text, len, options->ignore_case, options->dictionary_order, options->ignore_nonprinting, &lines->line_transforms[lines->items[i].ordinal])
+            : append_transform_span(lines, text, len, &lines->line_transforms[lines->items[i].ordinal]);
 
         if (!ok) {
             return false;
@@ -453,11 +439,10 @@ prepare_line_transforms(struct rank_lines *lines, const struct rank_options *opt
 static bool
 prepare_key_transform(struct rank_lines *lines, const struct rank_options *options, const struct rank_keydef *key, size_t index, const struct rank_key_span *span)
 {
-    if (rank_locale_collation_identity() && key_text_modifier(options, key)) {
+    (void)options;
+    if (rank_locale_collation_identity() && key_text_modifier(key)) {
         return append_filtered_span(lines, span->ptr, span->len,
-            options->ignore_case || key->ignore_case,
-            options->dictionary_order || key->dictionary_order,
-            options->ignore_nonprinting || key->ignore_nonprinting,
+            key->ignore_case, key->dictionary_order, key->ignore_nonprinting,
             &lines->key_transforms[index]);
     }
     return append_transform_span(lines, span->ptr, span->len, &lines->key_transforms[index]);
@@ -590,9 +575,9 @@ global_text_modifier(const struct rank_options *options)
 }
 
 static bool
-key_text_modifier(const struct rank_options *options, const struct rank_keydef *key)
+key_text_modifier(const struct rank_keydef *key)
 {
-    return global_text_modifier(options) || key->ignore_case || key->dictionary_order || key->ignore_nonprinting;
+    return key->ignore_case || key->dictionary_order || key->ignore_nonprinting;
 }
 
 static bool
@@ -931,12 +916,15 @@ extract_key_span(const struct rank_line *line, const struct rank_options *option
 {
     size_t start;
     size_t limit;
-    bool ignore_start_blanks = options->ignore_leading_blanks || key->ignore_start_blanks;
-    bool ignore_end_blanks = options->ignore_leading_blanks || key->ignore_end_blanks;
+    bool ignore_start_blanks = key->ignore_start_blanks;
+    bool ignore_end_blanks = key->ignore_end_blanks;
     struct rank_key_span span;
 
     if (options->has_field_separator) {
         start = explicit_field_start(line, options->field_separator, key->start_field);
+        if (ignore_start_blanks) {
+            start += rank_scan_nonblank(line->text + start, line->len - start);
+        }
         limit = key->has_end ? explicit_field_start(line, options->field_separator, key->end_field) : line->len;
         if (key->has_end) {
             limit = explicit_field_end(line, options->field_separator, limit);
@@ -960,6 +948,9 @@ extract_key_span(const struct rank_line *line, const struct rank_options *option
 
         if (options->has_field_separator) {
             field_start = explicit_field_start(line, options->field_separator, key->end_field);
+            if (ignore_end_blanks) {
+                field_start += rank_scan_nonblank(line->text + field_start, line->len - field_start);
+            }
         } else {
             field_start = blank_field_start(line, key->end_field, ignore_end_blanks);
         }
@@ -987,6 +978,9 @@ extract_explicit_key_span_cached(const struct rank_line *line, const struct rank
     size_t limit = key->has_end ? field_ends[key->end_field] : line->len;
     struct rank_key_span span;
 
+    if (key->ignore_start_blanks && start < line->len) {
+        start += rank_scan_nonblank(line->text + start, line->len - start);
+    }
     if (key->has_start_char) {
         size_t add = key->start_char == 0 ? 0 : key->start_char - 1U;
 
@@ -996,6 +990,9 @@ extract_explicit_key_span_cached(const struct rank_line *line, const struct rank
         size_t field_start = field_starts[key->end_field];
         size_t add = key->end_char;
 
+        if (key->ignore_end_blanks && field_start < line->len) {
+            field_start += rank_scan_nonblank(line->text + field_start, line->len - field_start);
+        }
         limit = add > line->len - field_start ? line->len : field_start + add;
     }
     if (start > line->len) {
@@ -1014,10 +1011,10 @@ extract_explicit_key_span_cached(const struct rank_line *line, const struct rank
 }
 
 static struct rank_key_span
-extract_blank_key_span_cached(const struct rank_line *line, const struct rank_options *options, const struct rank_keydef *key, const size_t *blank_starts, const size_t *text_starts, const size_t *field_ends)
+extract_blank_key_span_cached(const struct rank_line *line, const struct rank_keydef *key, const size_t *blank_starts, const size_t *text_starts, const size_t *field_ends)
 {
-    bool ignore_start_blanks = options->ignore_leading_blanks || key->ignore_start_blanks;
-    bool ignore_end_blanks = options->ignore_leading_blanks || key->ignore_end_blanks;
+    bool ignore_start_blanks = key->ignore_start_blanks;
+    bool ignore_end_blanks = key->ignore_end_blanks;
     size_t start = ignore_start_blanks ? text_starts[key->start_field] : blank_starts[key->start_field];
     size_t limit = key->has_end ? field_ends[key->end_field] : line->len;
     struct rank_key_span span;
@@ -1198,9 +1195,16 @@ static void
 compute_random_digest(const struct rank_md5_ctx *base, const struct rank_options *options, const struct rank_keydef *key, const unsigned char *text, size_t len, struct rank_md5_digest *out, unsigned char **scratch, size_t *scratch_cap)
 {
     struct rank_md5_ctx ctx = *base;
-    bool fold_case = options->ignore_case || (key != NULL && key->ignore_case);
-    bool dictionary = options->dictionary_order || (key != NULL && key->dictionary_order);
-    bool nonprinting = options->ignore_nonprinting || (key != NULL && key->ignore_nonprinting);
+    bool fold_case = key != NULL ? key->ignore_case : options->ignore_case;
+
+    if (key == NULL && options->ignore_leading_blanks) {
+        size_t skip = rank_scan_nonblank(text, len);
+
+        text += skip;
+        len -= skip;
+    }
+    bool dictionary = key != NULL ? key->dictionary_order : options->dictionary_order;
+    bool nonprinting = key != NULL ? key->ignore_nonprinting : options->ignore_nonprinting;
 
     if (!rank_locale_collation_identity()) {
         size_t copy_len = len + 1U;

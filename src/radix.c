@@ -561,7 +561,7 @@ key_radix_range(struct rank_lines *lines, const struct rank_options *options, st
     size_t sum = lo;
     size_t i;
     size_t b;
-    bool reverse = options->reverse != options->keys[key_id].reverse;
+    bool reverse = options->keys[key_id].reverse;
 
     depth = skip_key_common_prefix_lcp(lines, items, lo, hi, key_id, depth, stats);
     if (hi - lo <= KEY_RADIX_INSERTION_THRESHOLD || depth >= RADIX_DEPTH_LIMIT) {
@@ -656,11 +656,11 @@ compare_key_from_depth(const struct rank_lines *lines, const struct rank_options
     while (a_pos < a_key->len && b_pos < b_key->len) {
         if (a_key->ptr[a_pos] < b_key->ptr[b_pos]) {
             result = -1;
-            return options->reverse != options->keys[key_id].reverse ? -result : result;
+            return options->keys[key_id].reverse ? -result : result;
         }
         if (a_key->ptr[a_pos] > b_key->ptr[b_pos]) {
             result = 1;
-            return options->reverse != options->keys[key_id].reverse ? -result : result;
+            return options->keys[key_id].reverse ? -result : result;
         }
         a_pos++;
         b_pos++;
@@ -669,7 +669,7 @@ compare_key_from_depth(const struct rank_lines *lines, const struct rank_options
         return 0;
     }
     result = a_pos == a_key->len ? -1 : 1;
-    return options->reverse != options->keys[key_id].reverse ? -result : result;
+    return options->keys[key_id].reverse ? -result : result;
 }
 
 static size_t
