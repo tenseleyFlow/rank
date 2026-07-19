@@ -801,7 +801,10 @@ files0_err_case() {
     ./rank "$@" >/dev/null 2>"$got_err" || got_status=$?
     if test -n "$gnu_sort"; then
         "$gnu_sort" "$@" >/dev/null 2>"$want_err" || want_status=$?
-        sed -e 's/^[^:]*sort:/rank:/' -e "s/Try '[^ ]*sort /Try 'rank /" "$want_err" > "$want_err.norm"
+        # Older coreutils (pre-9.5) says "stdin" where the pinned 9.11
+        # target says "standard input".
+        sed -e 's/^[^:]*sort:/rank:/' -e "s/Try '[^ ]*sort /Try 'rank /" \
+            -e 's/file names from stdin,/file names from standard input,/' "$want_err" > "$want_err.norm"
         mv "$want_err.norm" "$want_err"
     else
         ./rank "$@" >/dev/null 2>"$want_err" || want_status=$?
