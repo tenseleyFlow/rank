@@ -111,21 +111,27 @@ parse_modifiers(const char **text, struct rank_keydef *key, bool end_pos, char *
             break;
         case 'n':
             key->sort_mode = RANK_SORT_NUMERIC;
+            key->mode_flags |= RANK_MODE_FLAG_NUMERIC;
             break;
         case 'g':
             key->sort_mode = RANK_SORT_GENERAL_NUMERIC;
+            key->mode_flags |= RANK_MODE_FLAG_GENERAL;
             break;
         case 'h':
             key->sort_mode = RANK_SORT_HUMAN_NUMERIC;
+            key->mode_flags |= RANK_MODE_FLAG_HUMAN;
             break;
         case 'M':
             key->sort_mode = RANK_SORT_MONTH;
+            key->mode_flags |= RANK_MODE_FLAG_MONTH;
             break;
         case 'V':
             key->sort_mode = RANK_SORT_VERSION;
+            key->mode_flags |= RANK_MODE_FLAG_VERSION;
             break;
         case 'R':
             key->sort_mode = RANK_SORT_RANDOM;
+            key->mode_flags |= RANK_MODE_FLAG_RANDOM;
             break;
         default:
             set_error(error, error_len, "unsupported key modifier");

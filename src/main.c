@@ -43,6 +43,10 @@ main(int argc, char **argv)
         free_options(&options);
         return RANK_EXIT_SERIOUS;
     }
+    if (rank_options_check_ordering(&options) != RANK_OPTIONS_OK) {
+        free_options(&options);
+        return RANK_EXIT_SERIOUS;
+    }
     if (!rank_check_options_valid(&options)) {
         free_options(&options);
         return RANK_EXIT_SERIOUS;

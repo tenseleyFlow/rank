@@ -46,6 +46,7 @@ rank_options_init(struct rank_options *options, const char *argv0)
     options->debug = false;
     options->check_mode = RANK_CHECK_NONE;
     options->sort_mode = RANK_SORT_BYTE;
+    options->mode_flags = 0;
     options->random_source = NULL;
     options->has_field_separator = false;
     options->field_separator = 0;
@@ -157,26 +158,32 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
         }
         if (strcmp(arg, "--numeric-sort") == 0) {
             options->sort_mode = RANK_SORT_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_NUMERIC;
             continue;
         }
         if (strcmp(arg, "--general-numeric-sort") == 0) {
             options->sort_mode = RANK_SORT_GENERAL_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_GENERAL;
             continue;
         }
         if (strcmp(arg, "--human-numeric-sort") == 0) {
             options->sort_mode = RANK_SORT_HUMAN_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_HUMAN;
             continue;
         }
         if (strcmp(arg, "--month-sort") == 0) {
             options->sort_mode = RANK_SORT_MONTH;
+            options->mode_flags |= RANK_MODE_FLAG_MONTH;
             continue;
         }
         if (strcmp(arg, "--version-sort") == 0) {
             options->sort_mode = RANK_SORT_VERSION;
+            options->mode_flags |= RANK_MODE_FLAG_VERSION;
             continue;
         }
         if (strcmp(arg, "--random-sort") == 0) {
             options->sort_mode = RANK_SORT_RANDOM;
+            options->mode_flags |= RANK_MODE_FLAG_RANDOM;
             continue;
         }
         if (strcmp(arg, "--random-source") == 0) {
@@ -383,21 +390,27 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
                     break;
                 case 'n':
                     options->sort_mode = RANK_SORT_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_NUMERIC;
                     break;
                 case 'g':
                     options->sort_mode = RANK_SORT_GENERAL_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_GENERAL;
                     break;
                 case 'h':
                     options->sort_mode = RANK_SORT_HUMAN_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_HUMAN;
                     break;
                 case 'M':
                     options->sort_mode = RANK_SORT_MONTH;
+            options->mode_flags |= RANK_MODE_FLAG_MONTH;
                     break;
                 case 'V':
                     options->sort_mode = RANK_SORT_VERSION;
+            options->mode_flags |= RANK_MODE_FLAG_VERSION;
                     break;
                 case 'R':
                     options->sort_mode = RANK_SORT_RANDOM;
+            options->mode_flags |= RANK_MODE_FLAG_RANDOM;
                     break;
                 case 'k':
                     if (arg[j + 1] != '\0') {
@@ -482,6 +495,73 @@ rank_options_parse(struct rank_options *options, int argc, char **argv)
 
     debug_dump_keys(options);
 
+    return RANK_OPTIONS_OK;
+}
+
+/* GNU rejects combining ordering modes: more than one of n/g/h/M, or
+   any of them alongside V, R, -d, or -i (which share one slot in GNU's
+   count). -f never counts but does appear in the diagnostic. Letters
+   print in GNU's order; -d wins over -i when both were given. */
+static bool
+mode_set_compatible(const struct rank_options *options, unsigned int mode_flags, bool dictionary, bool nonprinting, bool fold)
+{
+    char letters[10];
+    size_t n = 0;
+    int count = ((mode_flags & RANK_MODE_FLAG_NUMERIC) ? 1 : 0)
+        + ((mode_flags & RANK_MODE_FLAG_GENERAL) ? 1 : 0)
+        + ((mode_flags & RANK_MODE_FLAG_HUMAN) ? 1 : 0)
+        + ((mode_flags & RANK_MODE_FLAG_MONTH) ? 1 : 0)
+        + (((mode_flags & (RANK_MODE_FLAG_VERSION | RANK_MODE_FLAG_RANDOM)) != 0 || dictionary || nonprinting) ? 1 : 0);
+
+    if (count <= 1) {
+        return true;
+    }
+    if (dictionary) {
+        letters[n++] = 'd';
+    } else if (nonprinting) {
+        letters[n++] = 'i';
+    }
+    if (fold) {
+        letters[n++] = 'f';
+    }
+    if (mode_flags & RANK_MODE_FLAG_GENERAL) {
+        letters[n++] = 'g';
+    }
+    if (mode_flags & RANK_MODE_FLAG_HUMAN) {
+        letters[n++] = 'h';
+    }
+    if (mode_flags & RANK_MODE_FLAG_MONTH) {
+        letters[n++] = 'M';
+    }
+    if (mode_flags & RANK_MODE_FLAG_NUMERIC) {
+        letters[n++] = 'n';
+    }
+    if (mode_flags & RANK_MODE_FLAG_RANDOM) {
+        letters[n++] = 'R';
+    }
+    if (mode_flags & RANK_MODE_FLAG_VERSION) {
+        letters[n++] = 'V';
+    }
+    letters[n] = '\0';
+    rank_diagf(options, "options '-%s' are incompatible", letters);
+    return false;
+}
+
+int
+rank_options_check_ordering(const struct rank_options *options)
+{
+    size_t i;
+
+    if (!mode_set_compatible(options, options->mode_flags, options->dictionary_order, options->ignore_nonprinting, options->ignore_case)) {
+        return RANK_EXIT_SERIOUS;
+    }
+    for (i = 0; i < options->key_count; i++) {
+        const struct rank_keydef *key = &options->keys[i];
+
+        if (!mode_set_compatible(options, key->mode_flags, key->dictionary_order, key->ignore_nonprinting, key->ignore_case)) {
+            return RANK_EXIT_SERIOUS;
+        }
+    }
     return RANK_OPTIONS_OK;
 }
 
@@ -891,26 +971,32 @@ set_sort_mode(struct rank_options *options, const char *text)
 {
     if (strcmp(text, "numeric") == 0 || strcmp(text, "n") == 0) {
         options->sort_mode = RANK_SORT_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_NUMERIC;
         return RANK_OPTIONS_OK;
     }
     if (strcmp(text, "general-numeric") == 0 || strcmp(text, "g") == 0) {
         options->sort_mode = RANK_SORT_GENERAL_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_GENERAL;
         return RANK_OPTIONS_OK;
     }
     if (strcmp(text, "human-numeric") == 0 || strcmp(text, "h") == 0) {
         options->sort_mode = RANK_SORT_HUMAN_NUMERIC;
+            options->mode_flags |= RANK_MODE_FLAG_HUMAN;
         return RANK_OPTIONS_OK;
     }
     if (strcmp(text, "month") == 0 || strcmp(text, "M") == 0) {
         options->sort_mode = RANK_SORT_MONTH;
+            options->mode_flags |= RANK_MODE_FLAG_MONTH;
         return RANK_OPTIONS_OK;
     }
     if (strcmp(text, "version") == 0 || strcmp(text, "V") == 0) {
         options->sort_mode = RANK_SORT_VERSION;
+            options->mode_flags |= RANK_MODE_FLAG_VERSION;
         return RANK_OPTIONS_OK;
     }
     if (strcmp(text, "random") == 0 || strcmp(text, "R") == 0) {
         options->sort_mode = RANK_SORT_RANDOM;
+            options->mode_flags |= RANK_MODE_FLAG_RANDOM;
         return RANK_OPTIONS_OK;
     }
     rank_diagf(options, "unsupported sort mode '%s'", text);

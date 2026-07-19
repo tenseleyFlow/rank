@@ -250,6 +250,16 @@ run_case key-blanks 'x   b\ny   a\n' -b -k2,2
 run_case key-blanks-late 'x   b\ny   a\n' -k2,2 -b
 run_case obsolete-key 'b 1\na 2\n' +1
 run_case obsolete-key-range 'z 2\na 1\n' +0 -1
+run_check_case incompat-nv 'b\na\n' -n -V
+run_check_case incompat-gn 'b\na\n' -n -g
+run_check_case incompat-dn 'b\na\n' -d -n
+run_check_case incompat-in 'b\na\n' -i -n
+run_check_case incompat-fgn 'b\na\n' -f -n -g
+run_check_case incompat-key 'b\na\n' -k1,1nV
+run_check_case incompat-sort-words 'b\na\n' --sort=numeric --sort=version
+run_case compat-nf '10\n2\n' -n -f
+run_case compat-dv 'a-b\nab\n' -d -V
+run_case compat-global-key 'b 1\na 2\n' -n -k1,1V
 run_case parallel-default 'd\nb\na\nc\n' --parallel=2
 run_case parallel-keyed 'x 2\ny 1\nz 3\n' --parallel=2 -k2,2
 run_case parallel-reverse 'a\nc\nb\n' --parallel=2 -r

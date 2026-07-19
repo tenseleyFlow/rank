@@ -37,6 +37,7 @@ struct rank_options {
     bool debug;
     enum rank_check_mode check_mode;
     enum rank_sort_mode sort_mode;
+    unsigned int mode_flags;
     const char *random_source;
     bool has_field_separator;
     unsigned char field_separator;
@@ -63,6 +64,7 @@ struct rank_options {
 void rank_options_init(struct rank_options *options, const char *argv0);
 int rank_options_parse(struct rank_options *options, int argc, char **argv);
 int rank_options_load_files0(struct rank_options *options);
+int rank_options_check_ordering(const struct rank_options *options);
 void rank_options_print_help(FILE *stream);
 void rank_options_print_version(FILE *stream);
 

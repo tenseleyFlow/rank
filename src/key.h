@@ -14,6 +14,17 @@ enum rank_sort_mode {
     RANK_SORT_RANDOM
 };
 
+/* Every ordering mode requested, not just the winner, so GNU's
+   "options '-XY' are incompatible" diagnostics can be reproduced. */
+enum {
+    RANK_MODE_FLAG_NUMERIC = 1U << 0,
+    RANK_MODE_FLAG_GENERAL = 1U << 1,
+    RANK_MODE_FLAG_HUMAN = 1U << 2,
+    RANK_MODE_FLAG_MONTH = 1U << 3,
+    RANK_MODE_FLAG_VERSION = 1U << 4,
+    RANK_MODE_FLAG_RANDOM = 1U << 5
+};
+
 struct rank_key_span {
     const unsigned char *ptr;
     size_t len;
@@ -34,6 +45,7 @@ struct rank_keydef {
     bool ignore_nonprinting;
     bool reverse;
     enum rank_sort_mode sort_mode;
+    unsigned int mode_flags;
 };
 
 bool rank_key_parse(const char *text, struct rank_keydef *key, char *error, size_t error_len);
